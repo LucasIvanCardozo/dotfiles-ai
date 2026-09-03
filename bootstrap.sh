@@ -125,6 +125,18 @@ else
   echo "  ! agent/zentui.json missing from bundle — skip zentui install" >&2
 fi
 
+# Install pi-web-search config (workflow + provider defaults). Copy from bundle
+# so it's versionable. Destination is the loader path in the pi-web-search ext
+# (sits at ~/.pi/web-search.json, NOT under ~/.pi/agent/).
+# Keep this file free of secrets — anything committed here ships in the repo.
+if [[ -f "$DOTFILES_DIR/agent/web-search.json" ]]; then
+  mkdir -p "$HOME/.pi"
+  cp "$DOTFILES_DIR/agent/web-search.json" "$HOME/.pi/web-search.json"
+  echo "  ✓ web-search config installed → ~/.pi/"
+else
+  echo "  ! agent/web-search.json missing from bundle — skip web-search config install" >&2
+fi
+
 # Install pi-edit-guard global config (auto-format on edit). Copy from bundle
 # so it's versionable. Destination matches the loader path in pi-edit-guard's
 # src/formatter-config.ts (getGlobalConfigPath). Project-level overrides live

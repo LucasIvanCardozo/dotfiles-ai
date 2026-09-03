@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# tps: lista todas las entregas de TP desde hoy hacia adelante.
+# Argumentos: ninguno. Sin TPs → "Sin TPs próximos."
+#
+# Depende de: khal 0.14+, python3.14.
+
+TAG="tp"
+EMPTY_MSG="Sin TPs próximos."
+HOY="$(date +%F)"
+LIM="$(date -d '+365 days' +%F)"
+python3.14 - "$TAG" "$EMPTY_MSG" "$HOY" "$LIM" <<'PY'
+import sys, subprocess
+from datetime import datetime
+tag, empty_msg, hoy_s, lim_s = sys.argv[1].lower(), sys.argv[2], sys.argv[3], sys.argv[4]
+hoy = datetime.strptime(hoy_s, "%Y-%m-%d")
+out = subprocess.check_output(
+    ["khal", "list", hoy_s, lim_s, "--once", "--format", "{start-date}|{title}|{categories}"],
+    text=True
+)
+matches = []
+for line in out.splitlines():
+    if "," in line or line.count("|") != 2:
+        continue
+    fecha_s, titulo, cats = line.split("|")
+    titulo, cats = titulo.strip(), cats.strip().lower()
+    if tag not in cats and tag not in titulo.lower():
+        continue
+    try:
+        d = datetime.strptime(fecha_s.strip(), "%Y-%m-%d")
+    except ValueError:
+        continue
+    if d >= hoy:
+        matches.append((d, titulo))
+matches.sort()
+if not matches:
+    print(empty_msg)
+    sys.exit(0)
+WEEKDAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+for d, titulo in matches:
+    weekday = WEEKDAYS[d.weekday()]
+    delta = (d - hoy).days
+    cuando = "hoy" if delta == 0 else ("mañana" if delta == 1 else f"en {delta} días")
+    print(f"{weekday:<10} {d.strftime('%Y-%m-%d')}  {titulo} ({cuando})")
+PY

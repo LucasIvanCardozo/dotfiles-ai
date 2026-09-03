@@ -6,6 +6,7 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 
 - `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + theme + zentui config + baked web-design rules + Next.js docs snapshot.
 - `agent/zentui.json` — Starship-style statusline config, copied to `~/.pi/agent/zentui.json`.
+- `agent/web-search.json` — `pi-web-search` ext config (workflow + provider defaults), copied to `~/.pi/web-search.json`. Keep this file free of secrets.
 - `themes/violet-rose.json` — Pi visual theme, copied to `~/.pi/agent/themes/violet-rose.json`.
 - `skills/<id>/SKILL.md` — local skills shipped with the bundle (e.g. `kalarm-cli`); copied to `~/.agents/skills/<id>/` on bootstrap.
 - `bake-web-design-rules.sh` — one-time fetch + inline of the `web-design-guidelines` rulebook so reviews work fully offline.
