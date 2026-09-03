@@ -27,6 +27,8 @@ akonadictl status
 
 Healthy `akonadictl status` output ends with `Akonadi Control: running`. If any agent reports `stopped` or `error`, see fixes below.
 
+> **Plasma 6 note**: `systemctl --user enable --now akonadi` will fail with "Unit akonadi.service does not exist". The correct unit is `akonadi_control.service` (marked `static`), and Akonadi is DBus-activated — `akonadictl start` is the only command you need.
+
 ## Reset / re-init (last resort)
 
 ```bash
@@ -95,3 +97,21 @@ korganizer &   # should show the probe event
 ```
 
 If steps 1–4 pass, the stack is healthy and `kalarm-cli` skill commands will work as expected.
+
+## Optional: expose `khal` vdir to KOrganizer via Akonadi icaldir_resource
+
+If you keep events in `~/.calendars/personal/` (khal's vdir) and want them visible in KOrganizer GUI, register the Akonadi icaldir resource:
+
+```bash
+# Create the agent instance (DBus call)
+qdbus6 org.freedesktop.Akonadi /ResourceManager \
+  org.freedesktop.Akonadi.ResourceManager.addResourceInstance \
+  akonadi_icaldir_resource \
+  '["Calendar", "ICal"]'
+
+# Configure the path via the resource's DBus interface
+# (path depends on the instance ID returned above; check with
+#  qdbus6 org.freedesktop.Akonadi /ResourceManager resourceInstances)
+```
+
+After setup, events added with `khal new` appear in KOrganizer. This is advanced — verify first whether KOrganizer visibility is actually needed before going through this.

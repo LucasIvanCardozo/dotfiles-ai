@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# que-teno: agenda del día (vista calendario).
+# Uso: que-teno [fecha]
+# Acepta: hoy, mañana, today, tomorrow, "next monday", "YYYY-MM-DD"
+# Default: hoy.
+#
+# Depende de: khal 0.14+ con calendar "personal" configurado.
+# Ver: references/khal-queries.md
+
+fecha="${1:-hoy}"
+case "$fecha" in
+    hoy|today)        f="$(date +%F)" ;;
+    mañana|manana|tomorrow) f="$(date -d 'tomorrow' +%F)" ;;
+    *)                f="$(date -d "$fecha" +%F 2>/dev/null || date +%F)" ;;
+esac
+khal calendar "$f" "$f"

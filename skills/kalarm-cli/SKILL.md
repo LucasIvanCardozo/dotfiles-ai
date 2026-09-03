@@ -1,83 +1,76 @@
 ---
 name: kalarm-cli
-description: "Trigger: kalarm, korganizer, konsolekalendar, akonadi, agendar, recordatorio, parcial, final, clase, cursada, horario, qué tengo, qué curso, agenda, próximo, lista eventos, calendar cli linux kde. Manage KDE calendar events, alarms, and reminders from the CLI on CachyOS/Arch."
+description: "Trigger: kalarm, korganizer, konsolekalendar, akonadi, agendar, recordatorio, parcial, final, clase, cursada, horario, qué tengo, qué curso, agenda, próximo, lista eventos, calendar cli linux kde. Manage KDE calendar events and reminders from the CLI on Plasma 6 / KDE Gear 26.08+ (CachyOS/Arch). Replaces the removed konsolekalendar with khal-based queries."
 license: Apache-2.0
 metadata:
   author: gentleman-programming
-  version: "1.0"
+  version: "2.0"
 ---
 
 ## Activation Contract
 
-Use this skill when the user wants to **schedule, list, modify, or delete calendar events and reminders on KDE Plasma** (CachyOS/Arch) using the terminal, or when an LLM is asked to script recurring academic/personal schedules.
+Use when the user wants to **schedule, list, modify, or delete calendar events and reminders on KDE Plasma** (CachyOS/Arch) via terminal, or scripts recurring academic/personal schedules.
 
-Activate on requests like:
-- "agendame un parcial el jueves a las 14"
-- "recordame esto 1 hora antes"
-- "cargá todo el cuatrimestre"
-- "agregá clase semanal los martes 18hs"
-- **"qué tengo el martes" / "qué curso el viernes" / "qué parciales se vienen"** (read-only query mode)
-- troubleshooting `kalarm`, `akonadictl`, `korganizer`
+Activate on: "agendame un parcial", "recordame esto 1 hora antes", "cargá el cuatrimestre", "qué tengo mañana", "qué parciales se vienen", troubleshooting `kalarm` / `khal` / `akonadi`.
 
-Do not activate for: Google/Outlook cloud calendars, mobile sync (this stack is local-only), or non-KDE distros without KAlarm.
+Do not activate for: Google/Outlook cloud calendars, mobile sync, non-KDE distros.
 
 ## Hard Rules
 
-- **Default tool is `kalarm`** — it natively supports reminders via `--reminder N` (e.g. `15M`, `1H`, `24H`, `3D`).
-- **Always pass `--korganizer`** unless the user explicitly says "solo en KAlarm". This makes the event visible in the GUI calendar.
-- **Default reminder**: 1 hour before (`--reminder 1H`). Ask before changing.
-- **Run behavior**: show the command first; only execute after user confirms with "dale"/"sí"/"ejecutá". Read-only commands (`kalarm --list`, `konsolekalendar --view`, `akonadictl status`) may run without confirmation.
-- **Date math is the agent's job**: produce `YYYY-MM-DD HH:MM` in local TZ; for relative dates use `date -d 'next Tuesday' +%F`. Day-only events default to 09:00.
-- **Query mode** (`qué tengo el martes`): read-only. Use `konsolekalendar --view` for events, `kalarm --list` for alarms. Parse plain-text output and answer in natural Spanish — never invent data, never dump raw output unless asked.
-- **Never edit system files** (`/etc/`, Akonadi DB, `~/.config/akonadi/*` schemas) without explicit OK.
-- **Recurrence for weekly classes**: `--repeat -1 --interval 7D` (infinite) or with `--until YYYY-MM-DD` for end-of-term.
-- **Akonadi is required** for KOrganizer/KAlarm GUI; verify with `akonadictl status` before assuming integration works.
+- **Plasma 6 reality check first.** Run `references/diagnose-environment.sh` once per session. Assume `konsolekalendar` does NOT exist and `kalarm --time` may be broken (KDE Gear 26.08+).
+- **Default query tool is `khal`**, not `konsolekalendar`. Install: `sudo pacman -S khal vdirsyncer`. If Python shebang breaks, apply the wrapper fix in `references/troubleshooting.md`.
+- **`kalarm` is preferred for events with native alarms**, but `--korganizer` segfaults without `--time` in 3.13.1 — pass `--time` always or use khal.
+- **Date math is the agent's job**: produce absolute `YYYY-MM-DD HH:MM`. khal 0.14+ does NOT parse "today +7 days" or "next monday"; convert with `date -d '...' +%F`.
+- **Show before execute.** Fenced block + one-line explanation; wait for "dale"/"sí"/"ejecutá". Read-only (`kalarm --list`, `khal list`, `akonadictl status`) needs no confirmation.
+- **Default reminder**: `--reminder 1H` or `-m 1H`. Ask before changing.
+- **Never edit system files** (`/etc/`, Akonadi DB, `~/.config/akonadi/*`) without explicit OK.
+- **Akonadi required for KOrganizer/KAlarm GUI**, not for khal CLI workflows. Verify with `akonadictl status` before assuming integration.
 
 ## Decision Gates
 
 | Situation | Tool | Reason |
 | --- | --- | --- |
-| Add event with reminder(s) | `kalarm -t ... --reminder N --korganizer` | One-shot, supports reminders natively |
-| Add event without reminder, pure calendar entry | `konsolekalendar --add ... --korganizer` | Lighter, no alarm overhead |
-| Bulk-load recurring weekly class | `kalarm` per occurrence OR shell loop | Avoid `--repeat` misuse; recurrence is fragile for academic terms |
-| Modify/delete an existing alarm | KOrganizer GUI or `kalarm --edit-id <id>` | CLI edit is awkward; GUI is safer |
-| User wants to see all alarms | `kalarm --list` or open KOrganizer | Read-only, no confirmation needed |
-| User asks "qué tengo el día X" / "qué curso el martes" | `konsolekalendar --view --date X --time 00:00 --end-time 23:59` | Parse and answer in Spanish |
-| User asks "qué se viene" / próximos N días | `konsolekalendar --show-next N` | Compact list, no date math needed |
-| User asks "qué tengo esta semana" | `konsolekalendar --view --date MON --end-date SUN` | Agent computes Monday/Sunday from today |
-| Diagnose missing event from KOrganizer | `references/akonadi-setup-kde.md` | Usually Akonadi not running |
+| Add event with native KDE alarm | `khal new ... -m 1H` (preferred) | Writes `VALARM`, reliable. `kalarm` is buggy. |
+| Add event with GUI visibility (KOrganizer) | KOrganizer GUI; CLI fallback broken | `--korganizer` segfaults in 3.13.1 without `--time` |
+| Bulk-load cuatrimestre | `assets/setup-calendario.sh` + loop `khal new` per occurrence | Idempotent + per-event khal |
+| "Qué tengo el día X" / "qué curso el martes" | `que-teno [fecha]` → `khal calendar` | khal 0.14+ uses `calendar`, not `agenda` |
+| "Próximo parcial / clase / TP" | `proximo-parcial [tag]` → `khal list --format` | Tag-based filtering + day delta |
+| "Cuánto falta para X" | `cuanto-falta <texto>` → `khal search` | Fuzzy match + day delta |
+| Edit/delete existing event | `khal edit <query>` (interactive) or KOrganizer GUI | CLI edit awkward; khal editor friendlier |
+| Diagnose missing event | `references/troubleshooting.md` | pyenv/Python, mirror desync, akonadi service name |
 
 ## Execution Steps
 
-1. **Confirm scope**: ask what to schedule (date+time, text, reminder windows) when unclear. Prefer one short sentence over multiple choice.
-2. **Format datetime**: produce `YYYY-MM-DD HH:MM` in local TZ. If only a date, append `09:00`.
-3. **Build the command** using the template:
+1. **Diagnose** (first interaction): `references/diagnose-environment.sh`. Capture Plasma/kalarm/khal versions, pyenv status, akonadi state.
+2. **One-shot setup** if `~/.calendars/personal/` missing: `assets/setup-calendario.sh`. Idempotent.
+3. **Confirm scope**: date+time, text, reminder window, tag (`parcial`/`clase`/`final`/`tp`).
+4. **Compute absolute dates** with `date -d '...' +%F`. Day-only events default to 09:00.
+5. **Build command**:
    ```bash
-   kalarm -t "YYYY-MM-DD HH:MM" --reminder 1H --korganizer "EVENT TEXT"
+   khal new 2026-09-15 14:00 2h "Parcial Algoritmos" -g parcial -m 1H
+   # Recurring class (with --until for end-of-term):
+   khal new "$(date -d 'monday' +%F) 18:00" 2h "Clase Redes" -g clase -r weekly -u 2026-12-15
    ```
-   Multiple reminders: append more `--reminder N` (e.g., `--reminder 24H --reminder 1H`).
-4. **Show the command** in a fenced block with a one-line explanation. Wait for user OK before executing.
-5. **Execute** on confirmation. Report exit code and one-line result.
-6. **Verify integration** only if user asks or if KOrganizer visibility is in question (`akonadictl status`).
-7. **For bulk academic loads**: propose a CSV or shell loop and let the user approve the whole batch at once, not event-by-event.
-8. **Query mode** (read-only, no confirmation needed):
-   - Compute the target date(s) with `date -d 'next Tuesday' +%F` (or `MON/SUN` for week range).
-   - Run the matching `konsolekalendar --view` or `--show-next N`.
-   - Parse output into short natural Spanish. Group by day if multi-day. Distinguish events from alarms.
-   - Empty result + user expects events → suspect Akonadi: suggest `akonadictl status` and `references/akonadi-setup-kde.md`.
+6. **Show + wait for OK** + execute. Report exit code.
+7. **Query mode** (read-only): use the wrappers; parse output, answer in natural Spanish, never invent.
 
 ## Output Contract
 
 Return after each action:
-- Commands shown vs commands executed (separated).
+- Commands shown vs executed (separated).
 - Confirmation prompt used (if any).
-- Files touched (usually none — Akonadi DB writes are implicit).
-- Any unresolved ambiguity (e.g., missing end date for recurrence).
-- Residual risks (e.g., Akonadi not running → event only in KAlarm).
+- Files touched (usually none — Akonadi writes are implicit).
+- Unresolved ambiguity (missing end date, recurring vs one-shot).
+- Residual risks (kalarm CLI bugs, no native notifications without KAlarm).
 
 ## References
 
-- `references/kalarm-vs-konsolekalendar.md` — when to use which CLI tool (write vs read).
-- `references/querying-events.md` — how to query events for a day/week/range and answer "qué tengo el martes".
-- `references/akonadi-setup-kde.md` — Akonadi install/start/troubleshoot on CachyOS/Arch.
-- Official docs: `https://docs.kde.org/trunk_kf6/en/kalarm/kalarm/cmdline-operation.html`
+- `references/plasma6-changes.md` — Plasma 5 → 6 calendar CLI changes
+- `references/troubleshooting.md` — pyenv/Python, mirror cache, `akonadi_control.service`, khal date quirks
+- `references/khal-queries.md` — khal 0.14+ command cheatsheet (replaces old `querying-events.md`)
+- `references/akonadi-setup-kde.md` — Akonadi install/start/reset (kept from v1, updated)
+- `references/diagnose-environment.sh` — environment probe; run once per session
+- `assets/setup-calendario.sh` — one-shot setup; idempotent
+- `assets/wrappers/que-teno` — calendar view for a day
+- `assets/wrappers/proximo-parcial` — next event with tag + day delta
+- `assets/wrappers/cuanto-falta` — fuzzy match + day deltas
