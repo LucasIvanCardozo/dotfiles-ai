@@ -61,6 +61,10 @@ AGENTS_SKILLS=(
   # Big catalog: add new ones here as you adopt them, sparse-checkout the
   # exact subpath under plugins/<category>/skills/<id>/.
   "https://github.com/wshobson/agents|plugins/javascript-typescript/skills/typescript-advanced-types|main"
+  # HTML PPT Studio (lewislulu, MIT, 8k+ stars). Subpath is space-separated
+  # because assets/templates live at repo root. Trailing |id sets a custom
+  # id; drops scripts/verify-output (5MB of CI screenshots) post-install.
+  "https://github.com/lewislulu/html-ppt-skill|SKILL.md assets templates references scripts LICENSE README.md README.zh-CN.md|main|html-ppt-studio"
   # "<repo-url>|<subpath-inside-repo>|<ref>"
   # example: clone just one subfolder of a monorepo into ~/.agents/skills/<id>
   # "https://github.com/MiniMax-AI/skills|skills/android-native-dev|main"
@@ -74,16 +78,18 @@ install_pi() {
 
 install_agents_skill() {
   local repo="$1" subpath="$2" ref="$3"
-  local id; id="$(basename "$subpath")"
+  local id="${4:-$(basename "$subpath")}"
   local target="$HOME/.agents/skills/$id"
 
   echo "→ agents-dir: $id  ($ref)"
   local tmp; tmp="$(mktemp -d)"
   git clone --depth 1 --filter=blob:none --sparse --branch "$ref" "$repo" "$tmp/repo" >/dev/null
-  git -C "$tmp/repo" sparse-checkout set --no-cone "$subpath" >/dev/null
+  # subpath may be a single directory or a space-separated list of paths
+  # (e.g. "SKILL.md assets templates"); sparse-checkout applies them all.
+  git -C "$tmp/repo" sparse-checkout set --no-cone $subpath >/dev/null
   mkdir -p "$(dirname "$target")"
   rm -rf "$target"
-  cp -r "$tmp/repo/$subpath" "$target"
+  cp -r "$tmp/repo/." "$target/"
   rm -rf "$tmp"
 }
 
@@ -94,9 +100,12 @@ done
 
 for entry in "${AGENTS_SKILLS[@]}"; do
   [[ "$entry" =~ ^# ]] && continue
-  IFS='|' read -r repo subpath ref _ <<< "$entry"
-  install_agents_skill "$repo" "$subpath" "$ref"
+  IFS='|' read -r repo subpath ref id _ <<< "$entry"
+  install_agents_skill "$repo" "$subpath" "$ref" "$id"
 done
+
+# Drop CI verification screenshots from heavy skills (not needed at runtime)
+rm -rf "$HOME/.agents/skills/html-ppt-studio/scripts/verify-output" 2>/dev/null || true
 
 # Install user theme (Pi visual config). Copy from bundle so it's versionable.
 if [[ -f "$DOTFILES_DIR/themes/violet-rose.json" ]]; then
