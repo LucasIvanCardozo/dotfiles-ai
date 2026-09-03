@@ -50,6 +50,17 @@ AGENTS_SKILLS=(
   "https://github.com/apcamargo/typst-skills|touying-author|main"
   # Media generation via mmx CLI (text/image/video/speech/music/vision/search)
   "https://github.com/MiniMax-AI/skills|skills/minimax-multimodal-toolkit|main"
+  # Prisma ORM skills (Prisma 7.x — official prisma/skills repo)
+  # Targets self-hosted Postgres (Neon/Supabase/RDS/local) via prisma-database-setup.
+  # prisma-postgres and prisma-postgres-setup are intentionally NOT included:
+  # they target the Prisma Postgres managed product only.
+  "https://github.com/prisma/skills|prisma-client-api|main"
+  "https://github.com/prisma/skills|prisma-cli|main"
+  "https://github.com/prisma/skills|prisma-database-setup|main"
+  # wshobson/agents marketplace (~94 plugins, ~183 skills).
+  # Big catalog: add new ones here as you adopt them, sparse-checkout the
+  # exact subpath under plugins/<category>/skills/<id>/.
+  "https://github.com/wshobson/agents|plugins/javascript-typescript/skills/typescript-advanced-types|main"
   # "<repo-url>|<subpath-inside-repo>|<ref>"
   # example: clone just one subfolder of a monorepo into ~/.agents/skills/<id>
   # "https://github.com/MiniMax-AI/skills|skills/android-native-dev|main"
