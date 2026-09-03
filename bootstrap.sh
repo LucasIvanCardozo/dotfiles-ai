@@ -125,6 +125,18 @@ else
   echo "  ! agent/zentui.json missing from bundle — skip zentui install" >&2
 fi
 
+# Install pi-edit-guard global config (auto-format on edit). Copy from bundle
+# so it's versionable. Destination matches the loader path in pi-edit-guard's
+# src/formatter-config.ts (getGlobalConfigPath). Project-level overrides live
+# at <cwd>/.pi/extensions/pi-edit-guard/config.json and are NOT touched here.
+if [[ -f "$DOTFILES_DIR/agent/pi-edit-guard.json" ]]; then
+  mkdir -p "$HOME/.pi/agent/extensions/pi-edit-guard"
+  cp "$DOTFILES_DIR/agent/pi-edit-guard.json" "$HOME/.pi/agent/extensions/pi-edit-guard/config.json"
+  echo "  ✓ pi-edit-guard config installed → ~/.pi/agent/extensions/pi-edit-guard/"
+else
+  echo "  ! agent/pi-edit-guard.json missing from bundle — skip pi-edit-guard config install" >&2
+fi
+
 # Install local-first skills bundled with the repo (idempotent copy).
 for skill_dir in "$DOTFILES_DIR"/skills/*/; do
   [[ -d "$skill_dir" ]] || continue
