@@ -9,7 +9,7 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 - `themes/violet-rose.json` — Pi visual theme, copied to `~/.pi/agent/themes/violet-rose.json`.
 - `skills/<id>/SKILL.md` — local skills shipped with the bundle (e.g. `kalarm-cli`); copied to `~/.agents/skills/<id>/` on bootstrap.
 - `bake-web-design-rules.sh` — one-time fetch + inline of the `web-design-guidelines` rulebook so reviews work fully offline.
-- `generate-next-docs.sh [version]` — snapshot `next@<version>/dist/docs/` into `~/.agents/skills/nextjs-docs-v<version>/`.
+- `generate-next-docs.sh [version]` — snapshot `next@<version>/dist/docs/` into `~/.agents/skills/nextjs-docs-v<sanitized>/` (dots in the semver version become dashes in the slug, e.g. `16.3` → `nextjs-docs-v16-3`).
 - `.atl/skill-registry.md` — generated index of all reachable skills. Do not hand-edit.
 
 ## Commands
@@ -18,7 +18,7 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 ./bootstrap.sh                          # install everything
 NEXT_DOCS_VERSION=15.5 ./bootstrap.sh   # pin Next.js docs version for this run
 ./bake-web-design-rules.sh              # (re)bake web-design rules offline
-./generate-next-docs.sh 16.3            # rebuild nextjs-docs skill for a version
+./generate-next-docs.sh 16.3            # rebuilds nextjs-docs-v16-3 (dots in version → dashes in slug)
 ```
 
 After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the new skills and theme.

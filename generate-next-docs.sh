@@ -2,7 +2,7 @@
 # generate-next-docs.sh — snapshot Next.js bundled docs into a global skill.
 #
 # Reads dist/docs/ from the official npm package and lands it at
-# ~/.agents/skills/nextjs-docs-v<version>/ as a deterministic, self-contained
+# ~/.agents/skills/nextjs-docs-v<sanitized-version>/ as a deterministic, self-contained
 # skill. Replaces per-project AGENTS.md reliance with a global one.
 #
 # Docs/ is mirrored, NOT auto-loaded into agent context. SKILL.md carries the
@@ -19,7 +19,10 @@
 set -euo pipefail
 
 VERSION="${1:-latest}"
-TARGET="$HOME/.agents/skills/nextjs-docs-v${VERSION}"
+# Skill id must match Pi's slug rule (lowercase a-z, 0-9, hyphens only),
+# so dots in the semver version become dashes in the slug.
+SKILL_ID="nextjs-docs-v${VERSION//./-}"
+TARGET="$HOME/.agents/skills/${SKILL_ID}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -42,7 +45,8 @@ if [[ "$VERSION" == "latest" ]]; then
     echo "✗ could not resolve latest (no npm and no curl?)"; exit 1
   fi
   echo "  latest: $VERSION"
-  TARGET="$HOME/.agents/skills/nextjs-docs-v${VERSION}"
+  SKILL_ID="nextjs-docs-v${VERSION//./-}"
+  TARGET="$HOME/.agents/skills/${SKILL_ID}"
   [[ -d "$TARGET" ]] && { echo "→ already exists: $TARGET"; exit 0; }
 fi
 
@@ -77,7 +81,7 @@ cp -r extracted/package/dist/docs/. "$TARGET/docs/"
 # Small SKILL.md (TOC only; not the docs themselves)
 cat > "$TARGET/SKILL.md" <<EOF
 ---
-name: nextjs-docs-v${VERSION}
+name: ${SKILL_ID}
 description: Next.js v${VERSION} bundled documentation. Snapshot of node_modules/next/dist/docs/. Use when working on Next.js to read current API patterns and per-error guides. Files in docs/ mirror the official docs tree exactly.
 ---
 
