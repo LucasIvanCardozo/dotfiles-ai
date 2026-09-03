@@ -96,6 +96,15 @@ else
   echo "  ! themes/violet-rose.json missing from bundle — skip theme install" >&2
 fi
 
+# Install zentui config (Pi visual config). Copy from bundle so it's versionable.
+if [[ -f "$DOTFILES_DIR/agent/zentui.json" ]]; then
+  mkdir -p "$HOME/.pi/agent"
+  cp "$DOTFILES_DIR/agent/zentui.json" "$HOME/.pi/agent/zentui.json"
+  echo "  ✓ zentui config installed → ~/.pi/agent/"
+else
+  echo "  ! agent/zentui.json missing from bundle — skip zentui install" >&2
+fi
+
 # Install local-first skills bundled with the repo (idempotent copy).
 for skill_dir in "$DOTFILES_DIR"/skills/*/; do
   [[ -d "$skill_dir" ]] || continue
