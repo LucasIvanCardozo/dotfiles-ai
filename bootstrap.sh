@@ -138,15 +138,13 @@ else
 fi
 
 # Install pi-edit-guard global config (auto-format on edit). Copy from bundle
-# so it's versionable. Destination matches the loader path in pi-edit-guard's
-# src/formatter-config.ts (getGlobalConfigPath). Project-level overrides live
-# at <cwd>/.pi/extensions/pi-edit-guard/config.json and are NOT touched here.
-if [[ -f "$DOTFILES_DIR/agent/pi-edit-guard.json" ]]; then
-  mkdir -p "$HOME/.pi/agent/extensions/pi-edit-guard"
-  cp "$DOTFILES_DIR/agent/pi-edit-guard.json" "$HOME/.pi/agent/extensions/pi-edit-guard/config.json"
-  echo "  ✓ pi-edit-guard config installed → ~/.pi/agent/extensions/pi-edit-guard/"
+# so it's versionable. Project-level overrides are NOT touched here.
+if [[ -f "$DOTFILES_DIR/agent/edit-guard.json" ]]; then
+  mkdir -p "$HOME/.pi/agent"
+  cp "$DOTFILES_DIR/agent/edit-guard.json" "$HOME/.pi/agent/edit-guard.json"
+  echo "  ✓ edit-guard config installed → ~/.pi/agent/"
 else
-  echo "  ! agent/pi-edit-guard.json missing from bundle — skip pi-edit-guard config install" >&2
+  echo "  ! agent/edit-guard.json missing from bundle — skip edit-guard config install" >&2
 fi
 
 # Install local-first skills bundled with the repo (idempotent copy).
