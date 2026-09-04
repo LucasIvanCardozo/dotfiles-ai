@@ -82,7 +82,7 @@ cp -r extracted/package/dist/docs/. "$TARGET/docs/"
 cat > "$TARGET/SKILL.md" <<EOF
 ---
 name: ${SKILL_ID}
-description: Next.js v${VERSION} bundled documentation. Snapshot of node_modules/next/dist/docs/. Use when working on Next.js to read current API patterns and per-error guides. Files in docs/ mirror the official docs tree exactly.
+description: Next.js v${VERSION} bundled documentation. Snapshot of npm \`next@${VERSION}/dist/docs/\` as the canonical API and per-error reference. Use when you need the exact current behavior of an App Router API (Server Components, Server Actions, Route Handlers), Cache Components / PPR semantics (\`use cache\`, \`cacheLife\`, \`cacheComponents\`), \`next.config.js\` options, or the per-error pages in \`docs/app/messages/\` (written for AI agents in Next 16+). Prefer this for "what does X do / why am I hitting error Y" look-ups; for workflow help load \`next-cache-components-adoption\`, \`next-cache-components-optimizer\`, or \`next-dev-loop\` instead. Navigate \`docs/\` by topic; do not load the whole tree at once.
 ---
 
 # Next.js docs (v${VERSION})
@@ -90,8 +90,8 @@ description: Next.js v${VERSION} bundled documentation. Snapshot of node_modules
 Deterministic snapshot of the official Next.js documentation bundled with npm \`next@${VERSION}\`.
 
 ## When to use
-
-When writing or reviewing Next.js code, prefer reading the matching file here over recalling patterns. The agent invokes this skill on Next.js work to pull per-page truth directly from \`docs/\`.
+    
+When writing or reviewing Next.js code, prefer reading the matching file here over recalling patterns. The agent invokes this skill on Next.js work to pull per-page truth directly from \`docs/\`. For workflow-specific help (adopting Cache Components, instant-navigation e2e, dev-server verification) the dedicated \`next-cache-components-adoption\`, \`next-cache-components-optimizer\`, and \`next-dev-loop\` skills are better starting points.
 
 ## How to navigate
 
