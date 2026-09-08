@@ -27,7 +27,9 @@ PI_SKILLS=(
 # Override per-run with: NEXT_DOCS_VERSION=15.5 ./bootstrap.sh
 NEXT_DOCS_VERSION="${NEXT_DOCS_VERSION:-16.3}"
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NEXT_DOCS_LOG="$DOTFILES_DIR/next-docs-installed.log"
+# Log lives outside the repo: bootstrap.sh is a dotfiles drop, runtime state
+# belongs in the user's XDG state dir, not inside the tracked tree.
+NEXT_DOCS_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-ai/next-docs-installed.log"
 
 AGENTS_SKILLS=(
   # Next.js official skills (sparse-checkout from vercel/next.js canary branch)
@@ -166,6 +168,7 @@ done
 # Snapshot Next.js docs into a global skill. Failure here is non-fatal:
 # the rest of the bundle is already installed and usable without it.
 if "$DOTFILES_DIR/generate-next-docs.sh" "$NEXT_DOCS_VERSION"; then
+  mkdir -p "$(dirname "$NEXT_DOCS_LOG")"
   printf '%s  v%s  OK\n' "$(date -u +%FT%TZ)" "$NEXT_DOCS_VERSION" >> "$NEXT_DOCS_LOG"
 else
   echo "  ! nextjs-docs (v${NEXT_DOCS_VERSION}) not generated — run $DOTFILES_DIR/generate-next-docs.sh $NEXT_DOCS_VERSION manually" >&2

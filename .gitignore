@@ -1,2 +1,5 @@
 # Local Pi runtime state
 .atl/
+
+# Runtime artifacts that older bootstrap.sh revisions wrote inside the repo.
+next-docs-installed.log
