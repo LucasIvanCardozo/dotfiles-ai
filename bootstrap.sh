@@ -20,7 +20,6 @@ set -euo pipefail
 PI_SKILLS=(
   "https://github.com/cathrynlavery/diagram-design"
   "npm:@lucascardozo/pi-edit-guard"   # own Pi ext: indentation-drift recovery on edit
-  "npm:pi-zentui"                      # Starship-style statusline + Opencode-style TUI
   "npm:@vndv/pi-codegraph"             # CodeGraph native ext (needs `@colbymchenry/codegraph` CLI installed separately)
 )
 
@@ -65,6 +64,11 @@ AGENTS_SKILLS=(
   # because assets/templates live at repo root. Trailing |id sets a custom
   # id; drops scripts/verify-output (5MB of CI screenshots) post-install.
   "https://github.com/lewislulu/html-ppt-skill|SKILL.md assets templates references scripts LICENSE README.md README.zh-CN.md|main|html-ppt-studio"
+  # Archify (tt-a1i, MIT): architecture/workflow/sequence/dataflow/lifecycle
+  # diagrams as standalone HTML. Subpath is the skill's directory inside
+  # the upstream monorepo (NOT the repo root). Drops test/ + the npm
+  # lockfile post-install (dev-only, not needed at skill runtime).
+  "https://github.com/tt-a1i/archify|archify|v2.10.0"
   # "<repo-url>|<subpath-inside-repo>|<ref>"
   # example: clone just one subfolder of a monorepo into ~/.agents/skills/<id>
   # "https://github.com/MiniMax-AI/skills|skills/android-native-dev|main"
@@ -106,6 +110,9 @@ done
 
 # Drop CI verification screenshots from heavy skills (not needed at runtime)
 rm -rf "$HOME/.agents/skills/html-ppt-studio/scripts/verify-output" 2>/dev/null || true
+# Drop dev-only artifacts from archify (tests + npm lockfile are not runtime)
+rm -rf "$HOME/.agents/skills/archify/test" 2>/dev/null || true
+rm -f  "$HOME/.agents/skills/archify/package-lock.json" 2>/dev/null || true
 
 # Install user theme (Pi visual config). Copy from bundle so it's versionable.
 if [[ -f "$DOTFILES_DIR/themes/violet-rose.json" ]]; then
@@ -114,15 +121,6 @@ if [[ -f "$DOTFILES_DIR/themes/violet-rose.json" ]]; then
   echo "  ✓ theme: violet-rose installed → ~/.pi/agent/themes/"
 else
   echo "  ! themes/violet-rose.json missing from bundle — skip theme install" >&2
-fi
-
-# Install zentui config (Pi visual config). Copy from bundle so it's versionable.
-if [[ -f "$DOTFILES_DIR/agent/zentui.json" ]]; then
-  mkdir -p "$HOME/.pi/agent"
-  cp "$DOTFILES_DIR/agent/zentui.json" "$HOME/.pi/agent/zentui.json"
-  echo "  ✓ zentui config installed → ~/.pi/agent/"
-else
-  echo "  ! agent/zentui.json missing from bundle — skip zentui install" >&2
 fi
 
 # Install pi-web-search config (workflow + provider defaults). Copy from bundle

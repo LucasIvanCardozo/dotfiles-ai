@@ -4,8 +4,7 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 
 ## Layout
 
-- `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + theme + zentui config + baked web-design rules + Next.js docs snapshot.
-- `agent/zentui.json` — Starship-style statusline config, copied to `~/.pi/agent/zentui.json`.
+- `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + theme + edit-guard config + baked web-design rules + Next.js docs snapshot.
 - `agent/web-search.json` — `pi-web-search` ext config (workflow + provider defaults), copied to `~/.pi/web-search.json`. Keep this file free of secrets.
 - `themes/violet-rose.json` — Pi visual theme, copied to `~/.pi/agent/themes/violet-rose.json`.
 - `skills/<id>/SKILL.md` — local skills shipped with the bundle (e.g. `kalarm-cli`); copied to `~/.agents/skills/<id>/` on bootstrap.
@@ -47,4 +46,4 @@ After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the 
 ## Adding a new Pi extension or theme
 
 - **Extension** — append the npm or git URL to `PI_SKILLS` in `bootstrap.sh`. Pi's `pi install <url>` handles the rest.
-- **Theme / zentui config** — drop the JSON file under `themes/` or `agent/` and re-run `./bootstrap.sh`. The script copies it into the matching `~/.pi/agent/` location.
+- **Theme / config JSON** — drop the JSON file under `themes/` or `agent/` and re-run `./bootstrap.sh`. The script copies it into the matching `~/.pi/agent/` location.
