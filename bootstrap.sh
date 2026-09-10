@@ -71,6 +71,10 @@ AGENTS_SKILLS=(
   # the upstream monorepo (NOT the repo root). Drops test/ + the npm
   # lockfile post-install (dev-only, not needed at skill runtime).
   "https://github.com/tt-a1i/archify|archify|v2.10.0"
+  # firecrawl/anydoc (MIT) — Office docs / PDFs (docx/pptx/xlsx/odt/pdf/csv/rtf/epub)
+  # → GFM Markdown via `npx -y @firecrawl/anydoc`. OCR hosted opcional con
+  # FIRECRAWL_API_KEY. Requiere Node 20+. Re-pinear a un tag estable cuando exista.
+  "https://github.com/firecrawl/anydoc|skills/convert-documents-to-markdown|main"
   # "<repo-url>|<subpath-inside-repo>|<ref>"
   # example: clone just one subfolder of a monorepo into ~/.agents/skills/<id>
   # "https://github.com/MiniMax-AI/skills|skills/android-native-dev|main"
@@ -95,7 +99,17 @@ install_agents_skill() {
   git -C "$tmp/repo" sparse-checkout set --no-cone $subpath >/dev/null
   mkdir -p "$(dirname "$target")"
   rm -rf "$target"
-  cp -r "$tmp/repo/." "$target/"
+  # If $subpath resolves to a directory inside the repo, flatten it into $target
+  # (so `skills/<id>/` entries land at $target/SKILL.md, not $target/skills/<id>/).
+  # Otherwise treat $subpath as a multi-path list (case: html-ppt-studio's
+  # `SKILL.md assets templates ...`) — sparse-checkout left them at repo root,
+  # so copy the whole root. Always strip the sparse clone's .git metadata.
+  if [[ -d "$tmp/repo/$subpath" ]]; then
+    cp -r "$tmp/repo/$subpath/." "$target/"
+  else
+    cp -r "$tmp/repo/." "$target/"
+  fi
+  rm -rf "$target/.git"
   rm -rf "$tmp"
 }
 

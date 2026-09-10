@@ -30,6 +30,7 @@ After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the 
 - **Pinning remote refs.** Always pin the git ref in `AGENTS_SKILLS` (`|main`, `|canary`, or a tag). Bare entries silently track upstream HEAD, which makes the bootstrap non-reproducible.
 - **Commit cadence.** Commit after changing `bootstrap.sh`, any `*.sh` script, themes, agent config, or local skills — these are the files that *change* the installed environment.
 - **Secrets.** None today. If a token or credential ever lands here, scrub the full git history (`git filter-repo` or BFG) before pushing.
+- **Skill runtime prerequisites.** Each remote skill may declare runtime deps. Currently bundled: `firecrawl/anydoc` needs Node 20+ on PATH (used via `npx -y @firecrawl/anydoc`); OCR hosted mode additionally needs `FIRECRAWL_API_KEY`. When adopting skills with new system deps, list them here.
 
 ## Edit boundaries
 
