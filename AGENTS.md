@@ -5,7 +5,7 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 ## Layout
 
 - `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + theme + edit-guard config + baked web-design rules + Next.js docs snapshot.
-- `agent/web-search.json` — `pi-web-search` ext config (workflow + provider defaults), copied to `~/.pi/web-search.json`. Keep this file free of secrets.
+- `agent/web-search.json` — `pi-web-access` ext config (workflow + provider defaults), copied to `~/.pi/agent/web-search.json` — the path `getWebSearchConfigDir()` falls back to when `XDG_CONFIG_HOME` is unset. Keep this file free of secrets.
 - `themes/violet-rose.json` — Pi visual theme, copied to `~/.pi/agent/themes/violet-rose.json`.
 - `skills/<id>/SKILL.md` — local skills shipped with the bundle (e.g. `kalarm-cli`); copied to `~/.agents/skills/<id>/` on bootstrap.
 - `bake-web-design-rules.sh` — one-time fetch + inline of the `web-design-guidelines` rulebook so reviews work fully offline.
@@ -28,7 +28,7 @@ After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the 
 - **Bundle vs runtime.** Everything under `~/.pi/agent/` and `~/.agents/skills/` is installed state. Edit here, then re-run `bootstrap.sh` to refresh. Never edit the installed copies directly — they will be overwritten.
 - **Local vs upstream skills.** Add a local skill under `skills/<id>/` when it must ship offline, depend on bundled assets, or be tweaked beyond what upstream ships. Add it to `AGENTS_SKILLS` (or `PI_SKILLS`) in `bootstrap.sh` when it lives upstream and is fetched from a remote.
 - **Pinning remote refs.** Always pin the git ref in `AGENTS_SKILLS` (`|main`, `|canary`, or a tag). Bare entries silently track upstream HEAD, which makes the bootstrap non-reproducible.
-- **Commit cadence.** Commit after changing `bootstrap.sh`, any `*.sh` script, themes, agent config, or local skills — these are the files that *change* the installed environment.
+- **Commit cadence.** Commit after changing `bootstrap.sh`, any `*.sh` script, themes, agent config, or local skills — these are the files that _change_ the installed environment.
 - **Secrets.** None today. If a token or credential ever lands here, scrub the full git history (`git filter-repo` or BFG) before pushing.
 - **Skill runtime prerequisites.** Each remote skill may declare runtime deps. Currently bundled: `firecrawl/anydoc` needs Node 20+ on PATH (used via `npx -y @firecrawl/anydoc`); OCR hosted mode additionally needs `FIRECRAWL_API_KEY`. When adopting skills with new system deps, list them here.
 

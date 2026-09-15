@@ -139,14 +139,15 @@ else
   echo "  ! themes/violet-rose.json missing from bundle — skip theme install" >&2
 fi
 
-# Install pi-web-search config (workflow + provider defaults). Copy from bundle
-# so it's versionable. Destination is the loader path in the pi-web-search ext
-# (sits at ~/.pi/web-search.json, NOT under ~/.pi/agent/).
-# Keep this file free of secrets — anything committed here ships in the repo.
+# Install pi-web-access (formerly pi-web-search) config. Copy from bundle so it's
+# versionable. Destination is the loader path the ext actually reads
+# (getWebSearchConfigDir() in utils.ts falls back to ~/.pi/agent/web-search.json
+# when XDG_CONFIG_HOME is unset). Keep this file free of secrets — anything
+# committed here ships in the repo.
 if [[ -f "$DOTFILES_DIR/agent/web-search.json" ]]; then
-  mkdir -p "$HOME/.pi"
-  cp "$DOTFILES_DIR/agent/web-search.json" "$HOME/.pi/web-search.json"
-  echo "  ✓ web-search config installed → ~/.pi/"
+  mkdir -p "$HOME/.pi/agent"
+  cp "$DOTFILES_DIR/agent/web-search.json" "$HOME/.pi/agent/web-search.json"
+  echo "  ✓ web-search config installed → ~/.pi/agent/"
 else
   echo "  ! agent/web-search.json missing from bundle — skip web-search config install" >&2
 fi
