@@ -6,6 +6,7 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 
 - `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + theme + edit-guard config + baked web-design rules + Next.js docs snapshot.
 - `agent/web-search.json` — `pi-web-access` ext config (workflow + provider defaults), copied to `~/.pi/agent/web-search.json` — the path `getWebSearchConfigDir()` falls back to when `XDG_CONFIG_HOME` is unset. Keep this file free of secrets.
+- `agent/models.json` — custom model providers config (e.g. the `nan` provider at `api.nan.builders`, with 7 models), copied to `~/.pi/agent/models.json` on bootstrap. **No-clobber install**: if the runtime file already exists, bootstrap leaves it alone. API keys never live in the bundle — see [API keys pattern](#api-keys-pattern) below.
 - `themes/violet-rose.json` — Pi visual theme, copied to `~/.pi/agent/themes/violet-rose.json`.
 - `skills/<id>/SKILL.md` — local skills shipped with the bundle (e.g. `kalarm-cli`); copied to `~/.agents/skills/<id>/` on bootstrap.
 - `bake-web-design-rules.sh` — one-time fetch + inline of the `web-design-guidelines` rulebook so reviews work fully offline.
@@ -25,12 +26,22 @@ After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the 
 
 ## Conventions
 
-- **Bundle vs runtime.** Everything under `~/.pi/agent/` and `~/.agents/skills/` is installed state. Edit here, then re-run `bootstrap.sh` to refresh. Never edit the installed copies directly — they will be overwritten.
+- **Bundle vs runtime.** Everything under `~/.pi/agent/` and `~/.agents/skills/` is installed state. Edit here, then re-run `bootstrap.sh` to refresh. Never edit the installed copies directly — they will be overwritten. **Exception:** `~/.pi/agent/models.json` is **not** overwritten by bootstrap if it already exists (see API keys pattern). To pull a refresh of the model list from the bundle, back up the runtime file first and remove it.
 - **Local vs upstream skills.** Add a local skill under `skills/<id>/` when it must ship offline, depend on bundled assets, or be tweaked beyond what upstream ships. Add it to `AGENTS_SKILLS` (or `PI_SKILLS`) in `bootstrap.sh` when it lives upstream and is fetched from a remote.
 - **Pinning remote refs.** Always pin the git ref in `AGENTS_SKILLS` (`|main`, `|canary`, or a tag). Bare entries silently track upstream HEAD, which makes the bootstrap non-reproducible.
 - **Commit cadence.** Commit after changing `bootstrap.sh`, any `*.sh` script, themes, agent config, or local skills — these are the files that _change_ the installed environment.
-- **Secrets.** None today. If a token or credential ever lands here, scrub the full git history (`git filter-repo` or BFG) before pushing.
+- **Secrets.** Never commit secrets. The bundle ships `agent/models.json` with `apiKey: ""` placeholders — real keys live only in `~/.pi/agent/models.json` (mode 600). If a token or credential ever lands in this repo by accident, scrub the full git history (`git filter-repo` or BFG) before pushing. See [API keys pattern](#api-keys-pattern) below for the model-provider contract.
 - **Skill runtime prerequisites.** Each remote skill may declare runtime deps. Currently bundled: `firecrawl/anydoc` needs Node 20+ on PATH (used via `npx -y @firecrawl/anydoc`); OCR hosted mode additionally needs `FIRECRAWL_API_KEY`. When adopting skills with new system deps, list them here.
+
+### API keys pattern
+
+`agent/models.json` is versionable config — model providers, base URLs, model IDs, `compat` flags — but it carries **per-provider `apiKey` fields** that have no business in git. The contract:
+
+1. **Bundle (`agent/models.json`)** ships every provider with `"apiKey": ""`. It defines the provider list, base URLs, models, and their metadata. The empty string is intentional, not a bug.
+2. **Runtime (`~/.pi/agent/models.json`)** is where the real keys live. The file is created on first bootstrap run with empty placeholders; the user (or another agent) fills the `apiKey` for each provider they actually use. Runtime permissions are `600`.
+3. **Bootstrap behavior is no-clobber**: if `~/.pi/agent/models.json` already exists, `bootstrap.sh` prints a skip message and leaves the file alone. Re-running bootstrap will never erase a real key.
+4. **To refresh the model list from the bundle**: back up the runtime file (`cp ~/.pi/agent/models.json{,.bak}`), delete it, re-run `./bootstrap.sh`, then merge any new providers/IDs back into the runtime file (and keep the real keys from the backup).
+5. **Never paste a real key into the bundle.** If you do, rotate the credential, then scrub git history before pushing.
 
 ## Edit boundaries
 

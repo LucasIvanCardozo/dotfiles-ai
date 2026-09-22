@@ -1,0 +1,71 @@
+{
+  "providers": {
+    "nan": {
+      "api": "openai-completions",
+      "apiKey": "",
+      "baseUrl": "https://api.nan.builders/v1",
+      "compat": {
+        "supportsDeveloperRole": true
+      },
+      "models": [
+        {
+          "contextWindow": 1048575,
+          "id": "deepseek-v4-flash",
+          "input": ["text", "image"],
+          "maxTokens": 32768,
+          "name": "DeepSeek V4 Flash",
+          "reasoning": true
+        },
+        {
+          "contextWindow": 1048576,
+          "id": "glm5.3-flash",
+          "input": ["text", "image"],
+          "maxTokens": 32768,
+          "name": "GLM 5.3 Flash",
+          "reasoning": true
+        },
+        {
+          "contextWindow": 262144,
+          "id": "qwen3.8-flash",
+          "input": ["text", "image"],
+          "maxTokens": 32768,
+          "name": "Qwen 3.8 Flash",
+          "reasoning": true
+        },
+        {
+          "contextWindow": 1048576,
+          "id": "mimo-v2.5",
+          "input": ["text", "image"],
+          "maxTokens": 32768,
+          "name": "Xiaomi MiMo V2.5",
+          "reasoning": true
+        },
+        {
+          "contextWindow": 262144,
+          "id": "gemma4",
+          "input": ["text", "image"],
+          "maxTokens": 65536,
+          "name": "Gemma 4",
+          "reasoning": true
+        },
+        {
+          "contextWindow": 262144,
+          "id": "qwen3.6",
+          "input": ["text", "image"],
+          "maxTokens": 65536,
+          "name": "Qwen 3.6",
+          "reasoning": true
+        },
+        {
+          "contextWindow": 1048576,
+          "id": "glm5.3",
+          "input": ["text"],
+          "maxTokens": 32768,
+          "name": "GLM 5.3 (premium)",
+          "reasoning": true
+        }
+      ],
+      "name": "NaN"
+    }
+  }
+}

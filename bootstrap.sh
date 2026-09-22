@@ -162,6 +162,26 @@ else
   echo "  ! agent/edit-guard.json missing from bundle — skip edit-guard config install" >&2
 fi
 
+# Install custom model providers config. Copy from bundle so it's versionable.
+# API keys NEVER live in the bundle — see AGENTS.md "API keys pattern". The
+# bundle ships with apiKey="" placeholders; you fill them in at runtime.
+#
+# No-clobber rule: if a runtime copy already exists, leave it alone so the
+# user's real keys survive any re-run of bootstrap.sh. To pull a refresh of
+# the bundle model list, back up the runtime file first and remove it.
+if [[ -f "$DOTFILES_DIR/agent/models.json" ]]; then
+  mkdir -p "$HOME/.pi/agent"
+  if [[ -f "$HOME/.pi/agent/models.json" ]]; then
+    echo "  ⤵  models config already at ~/.pi/agent/models.json — leaving it alone (preserves API keys)"
+  else
+    cp "$DOTFILES_DIR/agent/models.json" "$HOME/.pi/agent/models.json"
+    chmod 600 "$HOME/.pi/agent/models.json"
+    echo "  ✓ models config installed (placeholder apiKey=\"\") → ~/.pi/agent/ — fill in provider keys before use"
+  fi
+else
+  echo "  ! agent/models.json missing from bundle — skip models config install" >&2
+fi
+
 # Install local-first skills bundled with the repo (idempotent copy).
 for skill_dir in "$DOTFILES_DIR"/skills/*/; do
   [[ -d "$skill_dir" ]] || continue
