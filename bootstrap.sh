@@ -17,6 +17,14 @@
 
 set -euo pipefail
 
+# Output helpers. step() emits a section header; ok() an indented success;
+# kept() an indented "preserved at runtime" line for the no-clobber branch;
+# warn() an indented warning to stderr for non-fatal skips.
+step() { echo "→ $*"; }
+ok()   { echo "  ✓ $*"; }
+kept() { echo "  ⤵  $*"; }
+warn() { echo "  ! $*" >&2; }
+
 PI_SKILLS=(
   "https://github.com/cathrynlavery/diagram-design"
   "npm:@lucascardozo/pi-edit-guard"   # own Pi ext: indentation-drift recovery on edit
@@ -80,9 +88,23 @@ AGENTS_SKILLS=(
   # "https://github.com/MiniMax-AI/skills|skills/android-native-dev|main"
 )
 
+# Pre-count entries for the section banners. AGENTS_SKILLS entries are
+# "<repo>|<subpath>|<ref>[|<id>]" — count the array directly; pure-`#` lines
+# inside the array definition are bash comments and not elements.
+PI_COUNT=${#PI_SKILLS[@]}
+AGENTS_COUNT=${#AGENTS_SKILLS[@]}
+local_count=0
+for _ in "$DOTFILES_DIR"/skills/*/; do
+  [[ -d "$_" ]] || continue
+  local_count=$((local_count + 1))
+done
+
 install_pi() {
   local url="$1"
-  echo "→ pi install: $url"
+  # Derive a short name from the URL or npm spec for cleaner output. Works
+  # for both https://host/path/<name> and npm:@scope/<name> forms.
+  local name="${url##*/}"
+  ok "$name"
   pi install "$url"
 }
 
@@ -91,7 +113,7 @@ install_agents_skill() {
   local id="${4:-$(basename "$subpath")}"
   local target="$HOME/.agents/skills/$id"
 
-  echo "→ agents-dir: $id  ($ref)"
+  ok "$id  ($ref)"
   local tmp; tmp="$(mktemp -d)"
   git clone --depth 1 --filter=blob:none --sparse --branch "$ref" "$repo" "$tmp/repo" >/dev/null
   # subpath may be a single directory or a space-separated list of paths
@@ -113,11 +135,15 @@ install_agents_skill() {
   rm -rf "$tmp"
 }
 
+# === Pi extensions ===
+step "Pi extensions (${PI_COUNT})"
 for url in "${PI_SKILLS[@]}"; do
   [[ "$url" =~ ^# ]] && continue
   install_pi "$url"
 done
 
+# === Agent skills ===
+step "Agent skills (${AGENTS_COUNT})"
 for entry in "${AGENTS_SKILLS[@]}"; do
   [[ "$entry" =~ ^# ]] && continue
   IFS='|' read -r repo subpath ref id _ <<< "$entry"
@@ -130,16 +156,19 @@ rm -rf "$HOME/.agents/skills/html-ppt-studio/scripts/verify-output" 2>/dev/null 
 rm -rf "$HOME/.agents/skills/archify/test" 2>/dev/null || true
 rm -f  "$HOME/.agents/skills/archify/package-lock.json" 2>/dev/null || true
 
-# Install user theme (Pi visual config). Copy from bundle so it's versionable.
+# === Config files ===
+step "Config files"
+
+# Theme: Pi visual config. Copy from bundle so it's versionable.
 if [[ -f "$DOTFILES_DIR/themes/violet-rose.json" ]]; then
   mkdir -p "$HOME/.pi/agent/themes"
   cp "$DOTFILES_DIR/themes/violet-rose.json" "$HOME/.pi/agent/themes/violet-rose.json"
-  echo "  ✓ theme: violet-rose installed → ~/.pi/agent/themes/"
+  ok "violet-rose → ~/.pi/agent/themes/"
 else
-  echo "  ! themes/violet-rose.json missing from bundle — skip theme install" >&2
+  warn "themes/violet-rose.json missing from bundle — skip theme install"
 fi
 
-# Install pi-web-access (formerly pi-web-search) config. Copy from bundle so it's
+# pi-web-access (formerly pi-web-search) config. Copy from bundle so it's
 # versionable. Destination is the loader path the ext actually reads
 # (getWebSearchConfigDir() in utils.ts falls back to ~/.pi/agent/web-search.json
 # when XDG_CONFIG_HOME is unset). Keep this file free of secrets — anything
@@ -147,36 +176,36 @@ fi
 if [[ -f "$DOTFILES_DIR/agent/web-search.json" ]]; then
   mkdir -p "$HOME/.pi/agent"
   cp "$DOTFILES_DIR/agent/web-search.json" "$HOME/.pi/agent/web-search.json"
-  echo "  ✓ web-search config installed → ~/.pi/agent/"
+  ok "web-search.json → ~/.pi/agent/"
 else
-  echo "  ! agent/web-search.json missing from bundle — skip web-search config install" >&2
+  warn "agent/web-search.json missing from bundle — skip web-search config install"
 fi
 
-# Install pi-edit-guard global config (auto-format on edit). Copy from bundle
-# so it's versionable. Project-level overrides are NOT touched here.
+# pi-edit-guard global config (auto-format on edit). Copy from bundle so it's
+# versionable. Project-level overrides are NOT touched here.
 if [[ -f "$DOTFILES_DIR/agent/edit-guard.json" ]]; then
   mkdir -p "$HOME/.pi/agent"
   cp "$DOTFILES_DIR/agent/edit-guard.json" "$HOME/.pi/agent/edit-guard.json"
-  echo "  ✓ edit-guard config installed → ~/.pi/agent/"
+  ok "edit-guard.json → ~/.pi/agent/"
 else
-  echo "  ! agent/edit-guard.json missing from bundle — skip edit-guard config install" >&2
+  warn "agent/edit-guard.json missing from bundle — skip edit-guard config install"
 fi
 
-# Install gentle-pi provider profiles (model + thinking config for review/agent
-# roles). Copy from bundle so it's versionable. Clobber semantics: any runtime
-# `active` change is overwritten on next bootstrap — the bundle is the source
-# of truth for the default profile. The file carries no secrets.
+# gentle-pi provider profiles (model + thinking config for review/agent roles).
+# Copy from bundle so it's versionable. Clobber semantics: any runtime `active`
+# change is overwritten on next bootstrap — the bundle is the source of truth
+# for the default profile. The file carries no secrets.
 if [[ -f "$DOTFILES_DIR/gentle-ai/profiles.json" ]]; then
   mkdir -p "$HOME/.pi/gentle-ai"
   cp "$DOTFILES_DIR/gentle-ai/profiles.json" "$HOME/.pi/gentle-ai/profiles.json"
-  echo "  ✓ gentle-ai profiles installed → ~/.pi/gentle-ai/"
+  ok "gentle-ai/profiles.json → ~/.pi/gentle-ai/"
 else
-  echo "  ! gentle-ai/profiles.json missing from bundle — skip gentle-ai profiles install" >&2
+  warn "gentle-ai/profiles.json missing from bundle — skip gentle-ai profiles install"
 fi
 
-# Install custom model providers config. Copy from bundle so it's versionable.
-# API keys NEVER live in the bundle — see AGENTS.md "API keys pattern". The
-# bundle ships with apiKey="" placeholders; you fill them in at runtime.
+# Custom model providers config. Copy from bundle so it's versionable. API
+# keys NEVER live in the bundle — see AGENTS.md "API keys pattern". The bundle
+# ships with apiKey="" placeholders; you fill them in at runtime.
 #
 # No-clobber rule: if a runtime copy already exists, leave it alone so the
 # user's real keys survive any re-run of bootstrap.sh. To pull a refresh of
@@ -184,41 +213,50 @@ fi
 if [[ -f "$DOTFILES_DIR/agent/models.json" ]]; then
   mkdir -p "$HOME/.pi/agent"
   if [[ -f "$HOME/.pi/agent/models.json" ]]; then
-    echo "  ⤵  models config already at ~/.pi/agent/models.json — leaving it alone (preserves API keys)"
+    kept "models.json — runtime copy preserved (API keys)"
   else
     cp "$DOTFILES_DIR/agent/models.json" "$HOME/.pi/agent/models.json"
     chmod 600 "$HOME/.pi/agent/models.json"
-    echo "  ✓ models config installed (placeholder apiKey=\"\") → ~/.pi/agent/ — fill in provider keys before use"
+    ok "models.json → ~/.pi/agent/ (placeholder apiKey=\"\", fill in provider keys before use)"
   fi
 else
-  echo "  ! agent/models.json missing from bundle — skip models config install" >&2
+  warn "agent/models.json missing from bundle — skip models config install"
 fi
 
-# Install local-first skills bundled with the repo (idempotent copy).
+# === Local skills ===
+step "Local skills (${local_count})"
 for skill_dir in "$DOTFILES_DIR"/skills/*/; do
   [[ -d "$skill_dir" ]] || continue
   skill_id="$(basename "$skill_dir")"
   if [[ ! -f "$skill_dir/SKILL.md" ]]; then
-    echo "  ! $skill_id: missing SKILL.md, skip" >&2
+    warn "$skill_id: missing SKILL.md, skip"
     continue
   fi
   mkdir -p "$HOME/.agents/skills/$skill_id"
   cp -r "$skill_dir." "$HOME/.agents/skills/$skill_id/"
-  echo "  ✓ skill (local): $skill_id → ~/.agents/skills/"
+  ok "$skill_id → ~/.agents/skills/"
 done
 
+# === Baking offline rules ===
+step "Baking offline rules"
 # Bake the web-design-guidelines rulebook into the skill so reviews work offline.
 # Failure here is non-fatal: the un-baked skill still works via its remote fetcher.
-"$DOTFILES_DIR/bake-web-design-rules.sh" \
-  || echo "  ! web-design-guidelines rules not baked; skill will fall back to remote fetch" >&2
+if "$DOTFILES_DIR/bake-web-design-rules.sh"; then
+  ok "web-design-guidelines rules baked"
+else
+  warn "web-design-guidelines rules not baked; skill will fall back to remote fetch"
+fi
 
+# === Snapshotting Next.js docs ===
+step "Snapshotting Next.js docs (v${NEXT_DOCS_VERSION})"
 # Snapshot Next.js docs into a global skill. Failure here is non-fatal:
 # the rest of the bundle is already installed and usable without it.
 if "$DOTFILES_DIR/generate-next-docs.sh" "$NEXT_DOCS_VERSION"; then
   mkdir -p "$(dirname "$NEXT_DOCS_LOG")"
   printf '%s  v%s  OK\n' "$(date -u +%FT%TZ)" "$NEXT_DOCS_VERSION" >> "$NEXT_DOCS_LOG"
+  ok "nextjs-docs (v${NEXT_DOCS_VERSION}) installed"
 else
-  echo "  ! nextjs-docs (v${NEXT_DOCS_VERSION}) not generated — run $DOTFILES_DIR/generate-next-docs.sh $NEXT_DOCS_VERSION manually" >&2
+  warn "nextjs-docs (v${NEXT_DOCS_VERSION}) not generated — run $DOTFILES_DIR/generate-next-docs.sh $NEXT_DOCS_VERSION manually"
 fi
 
-echo "✓ done. open Pi and run /reload."
+echo "✓ Done. Open Pi and run /reload."
