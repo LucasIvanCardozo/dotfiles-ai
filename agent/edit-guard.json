@@ -24,7 +24,6 @@
     "*.vue": "prettier",
     "*.svelte": "prettier",
     "*.xml": "prettier",
-    "*.md": "prettier",
     "*.mdx": "prettier",
     "*.yml": "prettier",
     "*.yaml": "prettier",
