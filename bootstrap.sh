@@ -162,6 +162,18 @@ else
   echo "  ! agent/edit-guard.json missing from bundle — skip edit-guard config install" >&2
 fi
 
+# Install gentle-pi provider profiles (model + thinking config for review/agent
+# roles). Copy from bundle so it's versionable. Clobber semantics: any runtime
+# `active` change is overwritten on next bootstrap — the bundle is the source
+# of truth for the default profile. The file carries no secrets.
+if [[ -f "$DOTFILES_DIR/gentle-ai/profiles.json" ]]; then
+  mkdir -p "$HOME/.pi/gentle-ai"
+  cp "$DOTFILES_DIR/gentle-ai/profiles.json" "$HOME/.pi/gentle-ai/profiles.json"
+  echo "  ✓ gentle-ai profiles installed → ~/.pi/gentle-ai/"
+else
+  echo "  ! gentle-ai/profiles.json missing from bundle — skip gentle-ai profiles install" >&2
+fi
+
 # Install custom model providers config. Copy from bundle so it's versionable.
 # API keys NEVER live in the bundle — see AGENTS.md "API keys pattern". The
 # bundle ships with apiKey="" placeholders; you fill them in at runtime.
