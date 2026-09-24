@@ -13,9 +13,41 @@
 # Companion: ./bake-web-design-rules.sh — bundle web-design-guidelines rules offline
 #
 # Usage:  chmod +x bootstrap.sh   # first time only
-#         ./bootstrap.sh
+#         ./bootstrap.sh            # quiet: only curated lines
+#         ./bootstrap.sh --verbose  # stream every command's output live
+#
+# Output policy: by default only intentional lines are printed (section
+# headers, one ✓ per installed item, warnings). Everything a third-party
+# command prints (git clone progress, `pi install` chatter, helper-script
+# step logs) is captured by run_quiet() and discarded on success. On failure
+# the captured output is dumped, a persistent log is written under
+# $XDG_STATE_HOME/dotfiles-ai/, and the script aborts. Use --verbose to
+# bypass capture entirely when debugging.
 
 set -euo pipefail
+
+# Parse the only two flags this script understands. Everything else is an
+# error rather than a silently ignored argument.
+VERBOSE=0
+for arg in "$@"; do
+  case "$arg" in
+    -v|--verbose) VERBOSE=1 ;;
+    -h|--help) cat <<'USAGE'
+Usage: ./bootstrap.sh [--verbose]
+
+  (no flag)   print only curated lines: section headers, one ✓ per
+              installed item, ⤵ for preserved runtime files, ! for warnings
+  -v, --verbose  stream every command's output live (debugging)
+
+  DOTFILES_VERBOSE=1 does the same as --verbose.
+  NEXT_DOCS_VERSION=<v> pins the Next.js docs snapshot version.
+USAGE
+              exit 0 ;;
+    *) echo "bootstrap.sh: unknown argument: $arg" >&2; exit 2 ;;
+  esac
+done
+[[ "${DOTFILES_VERBOSE:-0}" == "1" ]] && VERBOSE=1
+readonly VERBOSE
 
 # Output helpers. step() emits a section header; ok() an indented success;
 # kept() an indented "preserved at runtime" line for the no-clobber branch;
@@ -24,6 +56,37 @@ step() { echo "→ $*"; }
 ok()   { echo "  ✓ $*"; }
 kept() { echo "  ⤵  $*"; }
 warn() { echo "  ! $*" >&2; }
+
+# Failure logs live outside the repo, next to the Next.js docs log below.
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-ai"
+
+# run_quiet LABEL CMD... — run CMD with stdout+stderr captured.
+# Success: nothing is printed. Failure: print the label, the captured output
+# indented, and the path of the persistent log, then propagate the exit code
+# (which aborts under `set -e`, or is caught by the caller's `if`).
+run_quiet() {
+  local label="$1"; shift
+  if (( VERBOSE )); then
+    "$@"
+    return
+  fi
+  local out rc=0
+  out="$(mktemp "${TMPDIR:-/tmp}/dotfiles-ai.XXXXXX")"
+  "$@" >"$out" 2>&1 || rc=$?
+  if (( rc == 0 )); then
+    rm -f "$out"
+    return 0
+  fi
+  local log; log="$LOG_DIR/bootstrap-$(date -u +%Y%m%dT%H%M%SZ).log"
+  mkdir -p "$LOG_DIR"
+  mv "$out" "$log" 2>/dev/null || true
+  {
+    printf '  ✗ %s failed (exit %s)\n' "$label" "$rc"
+    if [[ -f "$log" ]]; then tr '\r' '\n' < "$log" | sed 's/^/      /'; fi
+    printf '    full log: %s\n' "$log"
+  } >&2
+  return "$rc"
+}
 
 PI_SKILLS=(
   "https://github.com/cathrynlavery/diagram-design"
@@ -37,7 +100,7 @@ NEXT_DOCS_VERSION="${NEXT_DOCS_VERSION:-16.3}"
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Log lives outside the repo: bootstrap.sh is a dotfiles drop, runtime state
 # belongs in the user's XDG state dir, not inside the tracked tree.
-NEXT_DOCS_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-ai/next-docs-installed.log"
+NEXT_DOCS_LOG="$LOG_DIR/next-docs-installed.log"
 
 AGENTS_SKILLS=(
   # Next.js official skills (sparse-checkout from vercel/next.js canary branch)
@@ -104,8 +167,8 @@ install_pi() {
   # Derive a short name from the URL or npm spec for cleaner output. Works
   # for both https://host/path/<name> and npm:@scope/<name> forms.
   local name="${url##*/}"
+  run_quiet "pi install $name" pi install "$url"
   ok "$name"
-  pi install "$url"
 }
 
 install_agents_skill() {
@@ -113,12 +176,19 @@ install_agents_skill() {
   local id="${4:-$(basename "$subpath")}"
   local target="$HOME/.agents/skills/$id"
 
-  ok "$id  ($ref)"
   local tmp; tmp="$(mktemp -d)"
-  git clone --depth 1 --filter=blob:none --sparse --branch "$ref" "$repo" "$tmp/repo" >/dev/null
+  # Suppress git's own banner/messages only in quiet mode; under --verbose the
+  # live clone output is exactly what you want while debugging.
+  local git_quiet=()
+  (( VERBOSE )) || git_quiet=(--quiet)
+  # ${git_quiet[@]+...} is the empty-safe expansion: plain "${arr[@]}" trips
+  # `set -u` on bash < 4.4 when the array is empty.
+  run_quiet "$id: git clone" \
+    git clone ${git_quiet[@]+"${git_quiet[@]}"} --depth 1 --filter=blob:none --sparse --branch "$ref" "$repo" "$tmp/repo"
   # subpath may be a single directory or a space-separated list of paths
   # (e.g. "SKILL.md assets templates"); sparse-checkout applies them all.
-  git -C "$tmp/repo" sparse-checkout set --no-cone $subpath >/dev/null
+  run_quiet "$id: sparse-checkout" \
+    git -C "$tmp/repo" sparse-checkout set --no-cone $subpath
   mkdir -p "$(dirname "$target")"
   rm -rf "$target"
   # If $subpath resolves to a directory inside the repo, flatten it into $target
@@ -133,6 +203,7 @@ install_agents_skill() {
   fi
   rm -rf "$target/.git"
   rm -rf "$tmp"
+  ok "$id  ($ref)"
 }
 
 # === Pi extensions ===
@@ -241,7 +312,7 @@ done
 step "Baking offline rules"
 # Bake the web-design-guidelines rulebook into the skill so reviews work offline.
 # Failure here is non-fatal: the un-baked skill still works via its remote fetcher.
-if "$DOTFILES_DIR/bake-web-design-rules.sh"; then
+if run_quiet "bake-web-design-rules.sh" "$DOTFILES_DIR/bake-web-design-rules.sh"; then
   ok "web-design-guidelines rules baked"
 else
   warn "web-design-guidelines rules not baked; skill will fall back to remote fetch"
@@ -251,7 +322,8 @@ fi
 step "Snapshotting Next.js docs (v${NEXT_DOCS_VERSION})"
 # Snapshot Next.js docs into a global skill. Failure here is non-fatal:
 # the rest of the bundle is already installed and usable without it.
-if "$DOTFILES_DIR/generate-next-docs.sh" "$NEXT_DOCS_VERSION"; then
+if run_quiet "generate-next-docs.sh v${NEXT_DOCS_VERSION}" \
+   "$DOTFILES_DIR/generate-next-docs.sh" "$NEXT_DOCS_VERSION"; then
   mkdir -p "$(dirname "$NEXT_DOCS_LOG")"
   printf '%s  v%s  OK\n' "$(date -u +%FT%TZ)" "$NEXT_DOCS_VERSION" >> "$NEXT_DOCS_LOG"
   ok "nextjs-docs (v${NEXT_DOCS_VERSION}) installed"
