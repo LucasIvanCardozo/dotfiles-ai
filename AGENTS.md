@@ -4,7 +4,7 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 
 ## Layout
 
-- `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + theme + edit-guard config + baked web-design rules + Next.js docs snapshot.
+- `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + theme + edit-guard config + baked web-design rules + Next.js docs snapshot. Prints only curated lines; `--verbose` streams every command's output.
 - `agent/web-search.json` — `pi-web-access` ext config (workflow + provider defaults), copied to `~/.pi/agent/web-search.json` — the path `getWebSearchConfigDir()` falls back to when `XDG_CONFIG_HOME` is unset. Keep this file free of secrets.
 - `agent/models.json` — custom model providers config (e.g. the `nan` provider at `api.nan.builders`, with 7 models), copied to `~/.pi/agent/models.json` on bootstrap. **No-clobber install**: if the runtime file already exists, bootstrap leaves it alone. API keys never live in the bundle — see [API keys pattern](#api-keys-pattern) below.
 - `gentle-ai/profiles.json` — `gentle-pi` provider agent-model profiles (review/agent roles mapped to `model` + `thinking`), copied to `~/.pi/gentle-ai/profiles.json` on bootstrap. Versionable, clobber semantics: any runtime `active` change is overwritten on next bootstrap — the bundle is the source of truth for the default profile. No secrets.
@@ -17,7 +17,8 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, themes, 
 ## Commands
 
 ```sh
-./bootstrap.sh                          # install everything
+./bootstrap.sh                          # install everything (quiet, curated output)
+./bootstrap.sh --verbose                # same, streaming every command's output
 NEXT_DOCS_VERSION=15.5 ./bootstrap.sh   # pin Next.js docs version for this run
 ./bake-web-design-rules.sh              # (re)bake web-design rules offline
 ./generate-next-docs.sh 16.3            # rebuilds nextjs-docs-v16-3 (dots in version → dashes in slug)
@@ -30,6 +31,8 @@ After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the 
 - **Bundle vs runtime.** Everything under `~/.pi/agent/`, `~/.pi/gentle-ai/`, and `~/.agents/skills/` is installed state. Edit here, then re-run `bootstrap.sh` to refresh. Never edit the installed copies directly — they will be overwritten. **Exception:** `~/.pi/agent/models.json` is **not** overwritten by bootstrap if it already exists (see API keys pattern). To pull a refresh of the model list from the bundle, back up the runtime file first and remove it.
 - **Local vs upstream skills.** Add a local skill under `skills/<id>/` when it must ship offline, depend on bundled assets, or be tweaked beyond what upstream ships. Add it to `AGENTS_SKILLS` (or `PI_SKILLS`) in `bootstrap.sh` when it lives upstream and is fetched from a remote.
 - **Pinning remote refs.** Always pin the git ref in `AGENTS_SKILLS` (`|main`, `|canary`, or a tag). Bare entries silently track upstream HEAD, which makes the bootstrap non-reproducible.
+- **Quiet output is the contract.** `bootstrap.sh` prints only curated lines — section headers, one `✓` per installed item, `⤵` for preserved runtime files, `!` for warnings. Third-party output (`git clone`, `pi install`, helper scripts) is captured by `run_quiet` and discarded on success. Route new steps through `run_quiet` instead of redirecting to `/dev/null` (git writes its banner and progress to **stderr**, so `>/dev/null` alone does not silence it). Use `--verbose` or `DOTFILES_VERBOSE=1` when debugging; failures dump the captured output and write a log under `$XDG_STATE_HOME/dotfiles-ai/`.
+- **No receipt-driven development in this repo.** The clone-local review switch is off (`gentle-ai review mode disable --scope clone`), which overrides the global default. Do not run the native review preflight (`gentle_review` inspect/START) for candidates here and do not re-enable the switch for this clone; check with `gentle-ai review mode status`. Other repositories keep the global default.
 - **Commit cadence.** Commit after changing `bootstrap.sh`, any `*.sh` script, themes, agent config, or local skills — these are the files that _change_ the installed environment.
 - **Secrets.** Never commit secrets. The bundle ships `agent/models.json` with `apiKey: ""` placeholders — real keys live only in `~/.pi/agent/models.json` (mode 600). If a token or credential ever lands in this repo by accident, scrub the full git history (`git filter-repo` or BFG) before pushing. See [API keys pattern](#api-keys-pattern) below for the model-provider contract.
 - **Skill runtime prerequisites.** Each remote skill may declare runtime deps. Currently bundled: `firecrawl/anydoc` needs Node 20+ on PATH (used via `npx -y @firecrawl/anydoc`); OCR hosted mode additionally needs `FIRECRAWL_API_KEY`. When adopting skills with new system deps, list them here.
