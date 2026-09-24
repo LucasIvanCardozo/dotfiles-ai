@@ -2,137 +2,33 @@
   "kind": "gentle-pi.agent_model_profiles",
   "version": 1,
   "profiles": {
-    "current": {
-      "review-refuter": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-validator": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "jd-judge-a": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "jd-judge-b": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "jd-fix-agent": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "gentle-ai-explore": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "gentle-ai-verify": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "gentle-ai-worker": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-readability": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-reliability": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-resilience": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-risk": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      }
-    },
-    "Full-Minimax-M3": {
-      "review-refuter": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-validator": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "jd-judge-a": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "jd-judge-b": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "jd-fix-agent": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "gentle-ai-explore": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "gentle-ai-verify": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "gentle-ai-worker": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-readability": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-reliability": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-resilience": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "review-risk": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      },
-      "orchestrator": {
-        "model": "minimax/MiniMax-M3",
-        "thinking": "high"
-      }
-    },
     "Full-Code": {
       "review-refuter": {
         "model": "nan/deepseek-v4-flash",
         "thinking": "high"
       },
       "review-validator": {
-        "model": "nan/deepseek-v4-flash",
+        "model": "nan/glm5.3-flash",
         "thinking": "high"
       },
       "jd-judge-a": {
         "model": "nan/glm5.3-flash",
-        "thinking": "high"
+        "thinking": "max"
       },
       "jd-judge-b": {
-        "model": "nan/deepseek-v4-flash",
+        "model": "nan/qwen3.8-flash",
         "thinking": "high"
       },
       "jd-fix-agent": {
-        "model": "nan/glm5.3-flash",
+        "model": "nan/qwen3.8-flash",
         "thinking": "high"
       },
       "gentle-ai-explore": {
         "model": "nan/deepseek-v4-flash",
-        "thinking": "high"
+        "thinking": "medium"
       },
       "gentle-ai-verify": {
-        "model": "nan/deepseek-v4-flash",
+        "model": "nan/qwen3.8-flash",
         "thinking": "high"
       },
       "gentle-ai-worker": {
@@ -141,14 +37,14 @@
       },
       "review-readability": {
         "model": "nan/deepseek-v4-flash",
-        "thinking": "high"
+        "thinking": "medium"
       },
       "review-reliability": {
-        "model": "nan/deepseek-v4-flash",
+        "model": "nan/qwen3.8-flash",
         "thinking": "high"
       },
       "review-resilience": {
-        "model": "nan/deepseek-v4-flash",
+        "model": "nan/mimo-v2.5",
         "thinking": "high"
       },
       "review-risk": {
@@ -157,7 +53,7 @@
       },
       "orchestrator": {
         "model": "nan/deepseek-v4-flash",
-        "thinking": "high"
+        "thinking": "medium"
       }
     },
     "Chill-Code": {
@@ -166,7 +62,7 @@
         "thinking": "high"
       },
       "review-validator": {
-        "model": "nan/deepseek-v4-flash",
+        "model": "nan/glm5.3-flash",
         "thinking": "high"
       },
       "jd-judge-a": {
@@ -182,53 +78,53 @@
         "thinking": "high"
       },
       "gentle-ai-explore": {
-        "model": "nan/deepseek-v4-flash",
-        "thinking": "medium"
+        "model": "nan/gemma4",
+        "thinking": "low"
       },
       "gentle-ai-verify": {
         "model": "nan/deepseek-v4-flash",
         "thinking": "high"
       },
       "gentle-ai-worker": {
-        "model": "nan/glm5.3-flash",
-        "thinking": "medium"
+        "model": "nan/qwen3.8-flash",
+        "thinking": "high"
       },
       "review-readability": {
-        "model": "nan/deepseek-v4-flash",
-        "thinking": "medium"
+        "model": "nan/gemma4",
+        "thinking": "low"
       },
       "review-reliability": {
-        "model": "nan/deepseek-v4-flash",
-        "thinking": "medium"
+        "model": "nan/gemma4",
+        "thinking": "max"
       },
       "review-resilience": {
-        "model": "nan/deepseek-v4-flash",
-        "thinking": "medium"
+        "model": "nan/qwen3.6",
+        "thinking": "max"
       },
       "review-risk": {
         "model": "nan/glm5.3-flash",
-        "thinking": "medium"
+        "thinking": "high"
       },
       "orchestrator": {
         "model": "nan/deepseek-v4-flash",
         "thinking": "medium"
       }
     },
-    "Basic": {
+    "Boludear": {
       "review-refuter": {
         "model": "nan/qwen3.6",
         "thinking": "high"
       },
       "review-validator": {
-        "model": "nan/qwen3.6",
-        "thinking": "high"
+        "model": "nan/gemma4",
+        "thinking": "max"
       },
       "jd-judge-a": {
         "model": "nan/qwen3.6",
-        "thinking": "high"
+        "thinking": "max"
       },
       "jd-judge-b": {
-        "model": "nan/qwen3.6",
+        "model": "nan/gemma4",
         "thinking": "high"
       },
       "jd-fix-agent": {
@@ -236,8 +132,8 @@
         "thinking": "high"
       },
       "gentle-ai-explore": {
-        "model": "nan/qwen3.6",
-        "thinking": "high"
+        "model": "nan/gemma4",
+        "thinking": "low"
       },
       "gentle-ai-verify": {
         "model": "nan/qwen3.6",
@@ -245,29 +141,29 @@
       },
       "gentle-ai-worker": {
         "model": "nan/qwen3.6",
-        "thinking": "high"
+        "thinking": "max"
       },
       "review-readability": {
-        "model": "nan/qwen3.6",
-        "thinking": "high"
+        "model": "nan/gemma4",
+        "thinking": "low"
       },
       "review-reliability": {
-        "model": "nan/qwen3.6",
-        "thinking": "high"
+        "model": "nan/gemma4",
+        "thinking": "max"
       },
       "review-resilience": {
         "model": "nan/qwen3.6",
         "thinking": "high"
       },
       "review-risk": {
-        "model": "nan/qwen3.6",
-        "thinking": "high"
+        "model": "nan/gemma4",
+        "thinking": "max"
       },
       "orchestrator": {
         "model": "nan/qwen3.6",
-        "thinking": "high"
+        "thinking": "medium"
       }
     }
   },
-  "active": "Full-Minimax-M3"
+  "active": "Full-Code"
 }

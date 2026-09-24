@@ -20,9 +20,15 @@
           "contextWindow": 1048576,
           "id": "glm5.3-flash",
           "input": ["text", "image"],
-          "maxTokens": 32768,
+          "maxTokens": 131072,
           "name": "GLM 5.3 Flash",
-          "reasoning": true
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": "low",
+            "minimal": "low",
+            "xhigh": "max",
+            "max": "max"
+          }
         },
         {
           "contextWindow": 262144,
@@ -44,25 +50,27 @@
           "contextWindow": 262144,
           "id": "gemma4",
           "input": ["text", "image"],
-          "maxTokens": 65536,
+          "maxTokens": 131072,
           "name": "Gemma 4",
-          "reasoning": true
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": "none",
+            "xhigh": "max",
+            "max": "max"
+          }
         },
         {
           "contextWindow": 262144,
           "id": "qwen3.6",
           "input": ["text", "image"],
-          "maxTokens": 65536,
+          "maxTokens": 131072,
           "name": "Qwen 3.6",
-          "reasoning": true
-        },
-        {
-          "contextWindow": 1048576,
-          "id": "glm5.3",
-          "input": ["text"],
-          "maxTokens": 32768,
-          "name": "GLM 5.3 (premium)",
-          "reasoning": true
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": "none",
+            "xhigh": "max",
+            "max": "max"
+          }
         }
       ],
       "name": "NaN"
