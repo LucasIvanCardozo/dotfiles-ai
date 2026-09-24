@@ -16,6 +16,10 @@
 #         ./bootstrap.sh            # quiet: only curated lines
 #         ./bootstrap.sh --verbose  # stream every command's output live
 #
+# DOTFILES_JOBS=<n> caps how many agent skills install concurrently
+# (default 6, 1 = one at a time). The clone loop is latency-bound, so a small
+# pool is most of the wall-clock win; 12 distinct repos back the 21 entries.
+#
 # Output policy: by default only intentional lines are printed (section
 # headers, one ✓ per installed item, warnings). Everything a third-party
 # command prints (git clone progress, `pi install` chatter, helper-script
@@ -40,6 +44,7 @@ Usage: ./bootstrap.sh [--verbose]
   -v, --verbose  stream every command's output live (debugging)
 
   DOTFILES_VERBOSE=1 does the same as --verbose.
+  DOTFILES_JOBS=<n>  concurrent skill installs (default 6, 1 = sequential).
   NEXT_DOCS_VERSION=<v> pins the Next.js docs snapshot version.
 USAGE
               exit 0 ;;
@@ -80,12 +85,21 @@ run_quiet() {
   local log; log="$LOG_DIR/bootstrap-$(date -u +%Y%m%dT%H%M%SZ).log"
   mkdir -p "$LOG_DIR"
   mv "$out" "$log" 2>/dev/null || true
+  _dump_failure "$label" "$rc" "$log"
+  return "$rc"
+}
+
+# _dump_failure LABEL EXITCODE LOGFILE — the single place that decides how a
+# failed step looks. Shared by run_quiet and by the parallel skills loop.
+# `tr` because git writes progress with carriage returns, which would otherwise
+# collapse the dump into one unreadable line.
+_dump_failure() {
+  local label="$1" rc="$2" log="$3"
   {
     printf '  ✗ %s failed (exit %s)\n' "$label" "$rc"
     if [[ -f "$log" ]]; then tr '\r' '\n' < "$log" | sed 's/^/      /'; fi
     printf '    full log: %s\n' "$log"
   } >&2
-  return "$rc"
 }
 
 PI_SKILLS=(
@@ -171,24 +185,20 @@ install_pi() {
   ok "$name"
 }
 
-install_agents_skill() {
-  local repo="$1" subpath="$2" ref="$3"
-  local id="${4:-$(basename "$subpath")}"
-  local target="$HOME/.agents/skills/$id"
-
+install_agents_skill_worker() {
+  local repo="$1" subpath="$2" ref="$3" target="$4"
   local tmp; tmp="$(mktemp -d)"
-  # Suppress git's own banner/messages only in quiet mode; under --verbose the
-  # live clone output is exactly what you want while debugging.
-  local git_quiet=()
-  (( VERBOSE )) || git_quiet=(--quiet)
-  # ${git_quiet[@]+...} is the empty-safe expansion: plain "${arr[@]}" trips
-  # `set -u` on bash < 4.4 when the array is empty.
-  run_quiet "$id: git clone" \
-    git clone ${git_quiet[@]+"${git_quiet[@]}"} --depth 1 --filter=blob:none --sparse --branch "$ref" "$repo" "$tmp/repo"
+  # GIT_TERMINAL_PROMPT=0: jobs run with stdin detached, so a credential prompt
+  # (unreachable repo, private repo, bad ref) would hang or steal terminal input
+  # instead of failing. Fail fast. --quiet always: in the parallel path the
+  # caller already captures this function's output, and in the verbose path the
+  # clone banner is noise the user did not ask for.
+  GIT_TERMINAL_PROMPT=0 git clone --quiet --depth 1 --filter=blob:none \
+    --sparse --branch "$ref" "$repo" "$tmp/repo" || { rm -rf "$tmp"; return 1; }
   # subpath may be a single directory or a space-separated list of paths
   # (e.g. "SKILL.md assets templates"); sparse-checkout applies them all.
-  run_quiet "$id: sparse-checkout" \
-    git -C "$tmp/repo" sparse-checkout set --no-cone $subpath
+  git -C "$tmp/repo" sparse-checkout set --no-cone $subpath \
+    || { rm -rf "$tmp"; return 1; }
   mkdir -p "$(dirname "$target")"
   rm -rf "$target"
   # If $subpath resolves to a directory inside the repo, flatten it into $target
@@ -203,7 +213,6 @@ install_agents_skill() {
   fi
   rm -rf "$target/.git"
   rm -rf "$tmp"
-  ok "$id  ($ref)"
 }
 
 # === Pi extensions ===
@@ -214,12 +223,89 @@ for url in "${PI_SKILLS[@]}"; do
 done
 
 # === Agent skills ===
+#
+# The clone loop is latency-bound: each entry costs ~2.5-3.2s of DNS + TLS +
+# ref negotiation + one blob fetch, and it was 79% of a cold run. It runs in a
+# bounded pool instead, at ~5x wall-clock. Every skill writes to its own target
+# directory, so the jobs share no state — only PI_SKILLS (`pi install`) does,
+# through settings.json, and that is why it stays sequential.
+#
+# Output stays deterministic: jobs write to their own log, and the curated ✓
+# lines are replayed in declaration order after the barrier. No interleaving,
+# no completion-order dependence.
+SKILL_JOBS="${DOTFILES_JOBS:-6}"
+if [[ ! "$SKILL_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+  warn "DOTFILES_JOBS='$SKILL_JOBS' is not a positive integer — using 6"
+  SKILL_JOBS=6
+fi
+# The throttle uses `wait -n` (bash >= 4.3). On older bash (macOS ships 3.2)
+# fall back to one job at a time; the same code path then runs sequentially.
+if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 3) )); then
+  warn "bash ${BASH_VERSION%%(*} has no 'wait -n' — installing skills sequentially"
+  SKILL_JOBS=1
+fi
+
 step "Agent skills (${AGENTS_COUNT})"
+
+# Resolve every entry up front so both paths share one list and one ordering.
+SKILL_REPOS=(); SKILL_SUBPATHS=(); SKILL_REFS=(); SKILL_IDS=(); SKILL_LABELS=()
 for entry in "${AGENTS_SKILLS[@]}"; do
   [[ "$entry" =~ ^# ]] && continue
   IFS='|' read -r repo subpath ref id _ <<< "$entry"
-  install_agents_skill "$repo" "$subpath" "$ref" "$id"
+  id="${id:-$(basename "$subpath")}"
+  SKILL_REPOS+=("$repo"); SKILL_SUBPATHS+=("$subpath"); SKILL_REFS+=("$ref")
+  SKILL_IDS+=("$id"); SKILL_LABELS+=("$id  ($ref)")
 done
+
+if (( VERBOSE )); then
+  # Debug path: foreground, one at a time, output streaming live.
+  for skill_i in "${!SKILL_IDS[@]}"; do
+    install_agents_skill_worker "${SKILL_REPOS[skill_i]}" "${SKILL_SUBPATHS[skill_i]}" \
+      "${SKILL_REFS[skill_i]}" "$HOME/.agents/skills/${SKILL_IDS[skill_i]}"
+    ok "${SKILL_LABELS[skill_i]}"
+  done
+else
+  SKILL_JOBDIR="$(mktemp -d)"
+  for skill_i in "${!SKILL_IDS[@]}"; do
+    skill_id="${SKILL_IDS[skill_i]}"
+    # </dev/null: never let a job read the terminal. The status file is the only
+    # authoritative result — `wait` alone cannot say which job failed.
+    ( skill_rc=0
+      install_agents_skill_worker "${SKILL_REPOS[skill_i]}" "${SKILL_SUBPATHS[skill_i]}" \
+        "${SKILL_REFS[skill_i]}" "$HOME/.agents/skills/$skill_id" || skill_rc=$?
+      echo "$skill_rc" > "$SKILL_JOBDIR/$skill_id.status"
+    ) >"$SKILL_JOBDIR/$skill_id.log" 2>&1 </dev/null &
+    # Throttle: wait for one job to finish once the pool is full.
+    while (( $(jobs -rp | wc -l) >= SKILL_JOBS )); do wait -n || true; done
+  done
+  wait || true
+
+  # Barrier: all jobs are done, so the post-install cleanups and the bake step
+  # below see a complete tree. Replay results in declaration order.
+  skill_failed=0
+  for skill_i in "${!SKILL_IDS[@]}"; do
+    skill_id="${SKILL_IDS[skill_i]}"; skill_rc=1
+    skill_status="$SKILL_JOBDIR/$skill_id.status"
+    [[ -f "$skill_status" ]] && skill_rc="$(<"$skill_status")"
+    if (( skill_rc == 0 )); then
+      ok "${SKILL_LABELS[skill_i]}"
+    else
+      mkdir -p "$LOG_DIR"
+      skill_log="$LOG_DIR/bootstrap-$(date -u +%Y%m%dT%H%M%SZ)-$skill_id.log"
+      cp "$SKILL_JOBDIR/$skill_id.log" "$skill_log" 2>/dev/null || skill_log="$SKILL_JOBDIR/$skill_id.log"
+      _dump_failure "${SKILL_LABELS[skill_i]}" "$skill_rc" "$skill_log"
+      skill_failed=1
+    fi
+  done
+  rm -rf "$SKILL_JOBDIR"
+
+  # A pool cannot abort at the first error: every job already ran. Report them
+  # all, then stop before the later sections touch a half-installed tree.
+  if (( skill_failed )); then
+    warn "${AGENTS_COUNT} agent skills requested, some failed — fix and re-run"
+    exit 1
+  fi
+fi
 
 # Drop CI verification screenshots from heavy skills (not needed at runtime)
 rm -rf "$HOME/.agents/skills/html-ppt-studio/scripts/verify-output" 2>/dev/null || true
