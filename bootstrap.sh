@@ -40,12 +40,16 @@ for arg in "$@"; do
 Usage: ./bootstrap.sh [--verbose]
 
   (no flag)   print only curated lines: section headers, one ✓ per
-              installed item, ⤵ for preserved runtime files, ! for warnings
+              installed item, ! for warnings
   -v, --verbose  stream every command's output live (debugging)
 
   DOTFILES_VERBOSE=1 does the same as --verbose.
   DOTFILES_JOBS=<n>  concurrent skill installs (default 6, 1 = sequential).
   NEXT_DOCS_VERSION=<v> pins the Next.js docs snapshot version.
+  API keys: bootstrap reads one environment variable per provider — the
+  provider name uppercased with non-alphanumerics turned into _ plus
+  "_API_KEY" (provider `nan` -> NAN_API_KEY). No variable means apiKey="".
+  Keys are read by jq from its own environment, never from an argument.
 USAGE
               exit 0 ;;
     *) echo "bootstrap.sh: unknown argument: $arg" >&2; exit 2 ;;
@@ -55,11 +59,9 @@ done
 readonly VERBOSE
 
 # Output helpers. step() emits a section header; ok() an indented success;
-# kept() an indented "preserved at runtime" line for the no-clobber branch;
 # warn() an indented warning to stderr for non-fatal skips.
 step() { echo "→ $*"; }
 ok()   { echo "  ✓ $*"; }
-kept() { echo "  ⤵  $*"; }
 warn() { echo "  ! $*" >&2; }
 
 # Failure logs live outside the repo, next to the Next.js docs log below.
@@ -316,13 +318,19 @@ rm -f  "$HOME/.agents/skills/archify/package-lock.json" 2>/dev/null || true
 # === Config files ===
 step "Config files"
 
-# Theme: Pi visual config. Copy from bundle so it's versionable.
-if [[ -f "$DOTFILES_DIR/themes/violet-rose.json" ]]; then
-  mkdir -p "$HOME/.pi/agent/themes"
-  cp "$DOTFILES_DIR/themes/violet-rose.json" "$HOME/.pi/agent/themes/violet-rose.json"
-  ok "violet-rose → ~/.pi/agent/themes/"
-else
-  warn "themes/violet-rose.json missing from bundle — skip theme install"
+# Themes: Pi visual config. Copy every themes/*.json from the bundle so each
+# one is versionable. The loop is the mechanism, not a shipped artifact: the
+# bundle currently ships no theme, and an empty themes/ must be a silent no-op
+# rather than a permanent "missing from bundle" warning on every run.
+if [[ -d "$DOTFILES_DIR/themes" ]]; then
+  for theme_file in "$DOTFILES_DIR"/themes/*.json; do
+    # No nullglob here: an unmatched glob stays literal, so test before copying.
+    [[ -f "$theme_file" ]] || continue
+    theme_id="$(basename "$theme_file")"
+    mkdir -p "$HOME/.pi/agent/themes"
+    cp "$theme_file" "$HOME/.pi/agent/themes/$theme_id"
+    ok "$theme_id → ~/.pi/agent/themes/"
+  done
 fi
 
 # pi-web-access (formerly pi-web-search) config. Copy from bundle so it's
@@ -360,22 +368,53 @@ else
   warn "gentle-ai/profiles.json missing from bundle — skip gentle-ai profiles install"
 fi
 
-# Custom model providers config. Copy from bundle so it's versionable. API
-# keys NEVER live in the bundle — see AGENTS.md "API keys pattern". The bundle
-# ships with apiKey="" placeholders; you fill them in at runtime.
+# Custom model providers config. The bundle is the source of truth for the
+# provider list, the models and their metadata, and the API keys come from the
+# environment: provider `nan` reads NAN_API_KEY (provider name uppercased, every
+# non-alphanumeric turned into _). No variable -> apiKey="". See AGENTS.md
+# "API keys pattern".
 #
-# No-clobber rule: if a runtime copy already exists, leave it alone so the
-# user's real keys survive any re-run of bootstrap.sh. To pull a refresh of
-# the bundle model list, back up the runtime file first and remove it.
+# CLOBBERED on every run, so a provider or model added to the bundle reaches the
+# machine at the next bootstrap. The runtime file holds no irreplaceable state
+# (keys live in the environment, not in the file), so a malformed runtime copy
+# is simply replaced instead of being preserved or repaired.
 if [[ -f "$DOTFILES_DIR/agent/models.json" ]]; then
   mkdir -p "$HOME/.pi/agent"
-  if [[ -f "$HOME/.pi/agent/models.json" ]]; then
-    kept "models.json — runtime copy preserved (API keys)"
-  else
-    cp "$DOTFILES_DIR/agent/models.json" "$HOME/.pi/agent/models.json"
-    chmod 600 "$HOME/.pi/agent/models.json"
-    ok "models.json → ~/.pi/agent/ (placeholder apiKey=\"\", fill in provider keys before use)"
+  runtime_models="$HOME/.pi/agent/models.json"
+  # umask 077 + same-directory temp + mv: the replacement is atomic and never
+  # exposes a half-written credentials file or a momentarily widened mode.
+  models_tmp="$(umask 077; mktemp "$HOME/.pi/agent/.models.json.XXXXXX")"
+  models_dropped=""; models_lost=""
+  if [[ -f "$runtime_models" ]]; then
+    # Work out what this run removes BEFORE removing it, so the removal can be
+    # reported instead of discovered later as a broken role.
+    models_dropped="$(jq -r --slurpfile b "$DOTFILES_DIR/agent/models.json" \
+      'if (.providers | type) == "object"
+       then ((.providers | keys) - ($b[0].providers | keys) | join(", "))
+       else "" end' "$runtime_models" 2>/dev/null || true)"
   fi
+  # jq reads $ENV itself: the key never reaches an argv, so it cannot show up in
+  # `ps`, and no bash-4-only uppercasing is needed (macOS ships bash 3.2).
+  jq '.providers |= with_entries(
+        . as $e
+        | .value.apiKey = ($ENV[($e.key | ascii_upcase | gsub("[^A-Z0-9]"; "_")) + "_API_KEY"] // "")
+      )' "$DOTFILES_DIR/agent/models.json" > "$models_tmp"
+  if [[ -f "$runtime_models" ]]; then
+    # Only providers that survive this run count as a lost key: one that is being
+    # dropped entirely is already reported by the provider warning above.
+    models_lost="$(jq -r --slurpfile new "$models_tmp" \
+      '[.providers | to_entries[] | . as $e
+        | select($e.value.apiKey != ""
+                 and ($new[0].providers | has($e.key))
+                 and (($new[0].providers[$e.key].apiKey // "") == ""))
+        | $e.key] | join(", ")' \
+      "$runtime_models" 2>/dev/null || true)"
+  fi
+  chmod 600 "$models_tmp"
+  mv "$models_tmp" "$runtime_models"
+  ok "models.json → ~/.pi/agent/ ($(jq '.providers | length' "$runtime_models") provider(s); $(jq '[.providers[] | select(.apiKey != "")] | length' "$runtime_models") key(s) from the environment)"
+  [[ -n "$models_dropped" ]] && warn "models.json — provider(s) absent from the bundle were dropped: $models_dropped"
+  [[ -n "$models_lost" ]] && warn "models.json — API key(s) REMOVED because no <PROVIDER>_API_KEY is set: $models_lost"
 else
   warn "agent/models.json missing from bundle — skip models config install"
 fi
