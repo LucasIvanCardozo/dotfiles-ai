@@ -18,6 +18,14 @@
         },
         {
           "contextWindow": 1048576,
+          "id": "mimo-v2.6-flash",
+          "input": ["text", "image"],
+          "maxTokens": 32768,
+          "name": "Xiaomi MiMo V2.6 Flash",
+          "reasoning": true
+        },
+        {
+          "contextWindow": 1048576,
           "id": "glm5.3-flash",
           "input": ["text", "image"],
           "maxTokens": 131072,
