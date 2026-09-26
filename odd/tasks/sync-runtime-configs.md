@@ -157,9 +157,9 @@ second increment; the bundle is again behind the machine that runs it.
 
 ### Delivery (increment 2)
 
-- Merged into `main` fast-forward (`2bf7c90..77a5edd`), local branch
-  `chore/sync-mimo-v2.6-remap` deleted. `origin/main` is still `2bf7c90`: the
-  push is the user's decision and remains pending.
+- Merged into `main` fast-forward (`2bf7c90..77a5edd`) and the local branch
+  `chore/sync-mimo-v2.6-remap` deleted. This commit and the pre-existing unpushed
+  work were pushed later, in the single `2bf7c90..5c4a808` push.
 - **Correction to the increment-2 baseline record.** The increment-2 block above
   claims the runtime copies "moved again" and that `99232f68…` was the runtime
   baseline "captured before the first write". Both statements are wrong.
@@ -305,5 +305,19 @@ cross-check against a differently-read value report the wrong thing. Read the ra
 value and mask it when comparing.
 
 **Known exposure**: the `nan` key value reached the session transcript through
-mistake 2. Rotation is the user's call — see `AGENTS.md` "Secrets": rotate the
-credential first, then scrub history if the value ever reached a remote.
+mistake 2. It never reached GitHub: after the push, `origin/main` was checked
+again and its `agent/models.json` carries `apiKey: ""`. Rotation was therefore
+declined by the user, who only cared about the key being published.
+
+### Delivery (increment 3)
+
+- The runtime application itself changed no repository file: it touched
+  `~/.pi/agent/models.json` and `~/.pi/gentle-ai/profiles.json` only.
+- The repository side of this increment — correcting the increment-2 record,
+  adding the increment-3 plan, and recording the incident — shipped in
+  `5c4a808` `feat(bootstrap): clobber config with env-sourced keys, retire
+  theme`, merged fast-forward into `main` and pushed.
+- Still open: the runtime has **not** been re-run under the new environment
+  contract. Until `NAN_API_KEY` is exported, running `./bootstrap.sh` would
+  remove the key the runtime currently holds — see the migration note in
+  `models-json-clobber.md`.

@@ -114,7 +114,10 @@ the real environment, and synthetic keys.
 
 ## Delivery
 
-- Pending: commit is the user's call.
-- **Migration note:** on a machine whose runtime file already holds a key and
-  whose shell does not export the variable, the first run under this contract
-  **removes that key** and reports it. Set the variable before that run.
+- Commit `5c4a808` `feat(bootstrap): clobber config with env-sourced keys,
+  retire theme`, merged into `main` fast-forward from
+  `chore/bundle-config-contract` and pushed: `origin/main` = `5c4a808`.
+- **Migration note, still open on this machine:** the runtime file still holds
+  its 25-character key and the shell does not export `NAN_API_KEY` yet, so the
+  next `./bootstrap.sh` **removes that key** and reports it. Set the variable
+  before that run.

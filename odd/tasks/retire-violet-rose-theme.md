@@ -78,4 +78,6 @@ and replace `bootstrap.sh`'s hardcoded violet-rose block with a generic
 
 ## Delivery
 
-- Pending: commit is the user's call.
+- Commit `5c4a808` `feat(bootstrap): clobber config with env-sourced keys,
+  retire theme`, merged into `main` fast-forward from
+  `chore/bundle-config-contract` and pushed: `origin/main` = `5c4a808`.
