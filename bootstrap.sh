@@ -107,7 +107,7 @@ _dump_failure() {
 PI_SKILLS=(
   "https://github.com/cathrynlavery/diagram-design"
   "npm:@lucascardozo/pi-edit-guard"   # own Pi ext: indentation-drift recovery on edit
-  "npm:@vndv/pi-codegraph"             # CodeGraph native ext (needs `@colbymchenry/codegraph` CLI installed separately)
+  "npm:@estebanforge/pi-codegraph-enhanced"  # CodeGraph native ext, fork of @vndv/pi-codegraph with startup auto-index (needs `@colbymchenry/codegraph` CLI on PATH)
 )
 
 # Next.js docs snapshot — generates the nextjs-docs-v<version> skill at the end.
