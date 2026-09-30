@@ -179,4 +179,13 @@ byte-identical to the live runtime copy.
 
 ## Delivery
 
-- Branch `chore/config-overwrite-prompt`, commit pending.
+- Branch `chore/config-overwrite-prompt`, two work-unit commits on top of `e1428e5`:
+  - `b6864c1` `chore(config): sync the Boludear orchestrator model into the bundle`
+    — T1 in isolation, so the one-line config sync stays reviewable on its own.
+  - `7f75aed` `feat(bootstrap): ask before overwriting a differing config copy`
+    — `bootstrap.sh`, `AGENTS.md` and this record, including the F1/F3/F4 fix batch.
+- **Not pushed.** Push, pull request and merge remain the user's decisions.
+- Open follow-up for the user: F2 (the prompt lands after the network installs,
+  because the whole "Config files" section runs last). Fixing it means moving
+  sections, which changes the curated-output order this feature deliberately
+  left alone.
