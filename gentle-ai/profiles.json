@@ -160,7 +160,7 @@
         "thinking": "high"
       },
       "orchestrator": {
-        "model": "nan/qwen3.6",
+        "model": "nan/mimo-v2.6-flash",
         "thinking": "medium"
       }
     }
