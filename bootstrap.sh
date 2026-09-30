@@ -479,13 +479,21 @@ if [[ -f "$DOTFILES_DIR/agent/models.json" ]]; then
   runtime_models="$HOME/.pi/agent/models.json"
   # umask 077 + same-directory temp + mv: the replacement is atomic and never
   # exposes a half-written credentials file or a momentarily widened mode.
+  # Sweep temps left behind by a previous run that died without running its trap
+  # (SIGKILL, power loss, a killed container). The rendered temp holds the
+  # env-derived API keys, and an untrappable death is the one path no trap can
+  # cover — so a leftover must not survive into the next run. Only this script
+  # creates these names, and the script already treats ~/.pi/agent/ as its own
+  # (it replaces models.json wholesale), so removing them all is safe.
+  rm -f "$HOME/.pi/agent"/.models.json.* 2>/dev/null || true
   models_tmp="$(umask 077; mktemp "$HOME/.pi/agent/.models.json.XXXXXX")"
   models_dropped=""; models_lost=""
   # The rendered temp now lives ACROSS the overwrite prompt, so a Ctrl-C (or any
-  # fatal signal) while a human deliberates would park a copy of the env-derived
-  # API keys in ~/.pi/agent/ — a window that used to last microseconds. The EXIT
-  # trap covers the interrupt paths; on the normal path the replace branch's `mv`
-  # and the keep branch's `rm -f` already deal with it, so this is a no-op there.
+  # trappable fatal signal) while a human deliberates would park a copy of the
+  # env-derived API keys in ~/.pi/agent/ — a window that used to last
+  # microseconds. The EXIT trap covers the interrupt paths; on the normal path
+  # the replace branch's `mv` and the keep branch's `rm -f` already deal with it,
+  # so this is a no-op there.
   trap 'rm -f "$models_tmp"' EXIT
   # jq reads $ENV itself: the key never reaches an argv, so it cannot show up in
   # `ps`, and no bash-4-only uppercasing is needed (macOS ships bash 3.2).

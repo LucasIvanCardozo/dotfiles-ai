@@ -83,7 +83,10 @@ Two linked changes, both about the runtime copy of a bundle config:
    covers the interrupt paths (bash runs `EXIT` traps on the fatal signals a
    killed script receives; verified for SIGINT, SIGTERM and SIGHUP), while the
    replace branch's `mv` and the keep branch's `rm -f` already cover the normal
-   paths, so the trap is a no-op there.
+   paths, so the trap is a no-op there. SIGKILL cannot be trapped at all, so the
+   block also sweeps `~/.pi/agent/.models.json.*` before rendering its temp: a
+   leftover from an untrappable death is removed by the next run instead of
+   holding a copy of the keys indefinitely.
 
 ## Tasks
 
@@ -159,7 +162,9 @@ argv) while the rendered file still receives it at mode 600.
 parked at the prompt on a pty, a `.models.json.XXXXXX` temp **did** exist in the
 fake `$HOME/.pi/agent/`, at mode 600, **containing the sentinel key** — the
 exposure the finding described. After SIGTERM/SIGHUP: 0 orphans and the runtime
-copy byte-identical.
+copy byte-identical. After SIGKILL: 1 orphan, because no trap can run — and the
+next run's sweep removed it (`antes: 1 huérfano` → `después: 0`, with the run
+still exiting 0 and still printing its provider warnings).
 
 **Structural checks.** `bash -n` clean; `--help` exits 0 and documents `-y`,
 `--yes`, `DOTFILES_ASSUME_YES=1`; an unknown flag is still rejected with exit 2;
@@ -172,7 +177,7 @@ byte-identical to the live runtime copy.
 
 | id | finding | disposition |
 | --- | --- | --- |
-| F1 | An interrupted run left the rendered temp — holding the env-derived keys — in `~/.pi/agent/`, and they accumulated across kills. The prompt widened a microsecond window to "however long a human deliberates". | **Fixed** (decision 9): `trap 'rm -f "$models_tmp"' EXIT`, proven by the parked-process test above. |
+| F1 | An interrupted run left the rendered temp — holding the env-derived keys — in `~/.pi/agent/`, and they accumulated across kills. The prompt widened a microsecond window to "however long a human deliberates". | **Fixed** (decision 9), in two parts: `trap 'rm -f "$models_tmp"' EXIT` for the trappable signals, plus a pre-render sweep that self-heals the untrappable ones. Re-proven after the fix: parked at the prompt with a sentinel key, SIGTERM leaves 0 orphans and an intact runtime copy; SIGKILL leaves 1 orphan (no trap can run) that the next run removes. |
 | F2 | The whole "Config files" section runs *after* the extensions, the skill pool and the CLI tools, so a run stalls at the prompt only once the network installs have already mutated the machine. | **Recorded, not fixed** — reordering the sections changes the curated output contract and is out of scope for this feature. Candidate follow-up. |
 | F3 | Typing `yes` kept the copy, because decision 2 only accepted `y`/`Y`. Spec-conformant but a UX trap under a `[Y/n]` label. | **Fixed** (decision 2): `[yY][eE][sS]` is accepted; `yeah` still keeps. |
 | F4 | Three doc/code drifts in `AGENTS.md`: "a malformed runtime file is simply replaced" (now confirmed), "the next bootstrap removes the key" (now on the replace path only), and `DOTFILES_ASSUME_YES=1` documented nowhere. | **Fixed.** |
@@ -185,6 +190,9 @@ byte-identical to the live runtime copy.
   - `7f75aed` `feat(bootstrap): ask before overwriting a differing config copy`
     — `bootstrap.sh`, `AGENTS.md` and this record, including the F1/F3/F4 fix batch.
 - **Not pushed.** Push, pull request and merge remain the user's decisions.
+- One follow-up fix commit landed on top, after the late delivery of the
+  verifier's message: the pre-render sweep for untrappable deaths (F1's last
+  quarter). The post-fix regression is 8/8 in the extracted-block harness.
 - Open follow-up for the user: F2 (the prompt lands after the network installs,
   because the whole "Config files" section runs last). Fixing it means moving
   sections, which changes the curated-output order this feature deliberately
