@@ -189,7 +189,10 @@ byte-identical to the live runtime copy.
     — T1 in isolation, so the one-line config sync stays reviewable on its own.
   - `7f75aed` `feat(bootstrap): ask before overwriting a differing config copy`
     — `bootstrap.sh`, `AGENTS.md` and this record, including the F1/F3/F4 fix batch.
-- **Not pushed.** Push, pull request and merge remain the user's decisions.
+- **Merged fast-forward into `main` and pushed:** `origin/main` = `4ab51e3`
+  (merge commit-free: `main` had no commit the branch lacked, and the pushed
+  range was `e1428e5..4ab51e3`). The local feature branch was deleted; no remote
+  branch existed, since it was never pushed on its own.
 - One follow-up fix commit landed on top, after the late delivery of the
   verifier's message: the pre-render sweep for untrappable deaths (F1's last
   quarter). The post-fix regression is 8/8 in the extracted-block harness.
