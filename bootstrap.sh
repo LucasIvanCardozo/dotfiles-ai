@@ -315,6 +315,25 @@ rm -rf "$HOME/.agents/skills/html-ppt-studio/scripts/verify-output" 2>/dev/null 
 rm -rf "$HOME/.agents/skills/archify/test" 2>/dev/null || true
 rm -f  "$HOME/.agents/skills/archify/package-lock.json" 2>/dev/null || true
 
+# === CLI tools ===
+step "CLI tools"
+
+# agent-browser: hard runtime prerequisite of the bundled next-dev-loop skill
+# (>= 0.31.1), which drives a real Chrome next to /_next/mcp. Installed at
+# @latest on purpose — the skill ships from vercel/next.js canary and keeps
+# raising that floor, so a pinned CLI would go stale and the skill refuses to
+# fall back to a weaker probe. Sequential, like `pi install`: npm -g mutates
+# shared global state. No browser download happens here: agent-browser
+# auto-detects an existing Chrome/Brave/Chromium/Playwright install, and the
+# cold `agent-browser install` is a one-time per-machine step (see AGENTS.md).
+if command -v npm >/dev/null 2>&1; then
+  run_quiet "npm install -g agent-browser@latest" npm install -g agent-browser@latest
+  ab_version="$(agent-browser --version 2>/dev/null | head -1 || true)"
+  ok "agent-browser ${ab_version#agent-browser } (latest)"
+else
+  warn "npm not found on PATH — agent-browser not installed (next-dev-loop needs it)"
+fi
+
 # === Config files ===
 step "Config files"
 
