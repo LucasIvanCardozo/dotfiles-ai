@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# escanear — wrapper around `scanimage` with safe defaults for the Epson XP-211.
+# Usage:
+#   escanear [scanimage-options]                 # writes to stdout
+#   escanear -o /path/to/file.png [options]      # writes to file
+#
+# Defaults (override via flags):
+#   device:     epson2:net:192.168.1.41
+#   format:     png (lossless)
+#   resolution: 300 DPI (good for documents)
+#   mode:       Color
+#
+# Examples:
+#   escanear > /tmp/scan.png
+#   escanear --resolution 600 --mode Gray -o /tmp/high.png
+#   escanear --resolution 150 --format jpeg -o /tmp/photo.jpg
+#   escanear --format tiff > /tmp/archivo.tiff
+#   escanear --format png --resolution 300 --mode Lineart > /tmp/ocr.png
+
+set -euo pipefail
+
+DEVICE="epson2:net:192.168.1.41"
+
+# Pre-flight: device must be discoverable
+if ! scanimage -L 2>/dev/null | grep -qF "$DEVICE"; then
+  echo "ERROR: scanner '$DEVICE' not found by SANE." >&2
+  echo "  Run: scanimage -L" >&2
+  echo "  Or:  references/diagnose-environment.sh" >&2
+  exit 2
+fi
+
+# Strip any -o / --output from "$@" so scanimage doesn't fight us
+args=()
+out_file=""
+for arg in "$@"; do
+  case "$arg" in
+    -o|--output|--output-file|-o=*|--output=*|--output-file=*)
+      # Handle -o FILE (two tokens)
+      if [[ "$arg" == "-o" || "$arg" == "--output" || "$arg" == "--output-file" ]]; then
+        # Next arg is the filename — capture and skip both
+        # We'll handle this by post-processing stdout, not by passing to scanimage.
+        shift_or_skip="skip_next"
+        continue
+      else
+        # -o=FILE form
+        out_file="${arg#*=}"
+        continue
+      fi
+      ;;
+  esac
+  args+=("$arg")
+done
+
+# Simpler approach: detect -o manually after parsing
+out_file=""
+passthrough=()
+i=0
+while [[ $i -lt $# ]]; do
+  arg="${!i+${!i}}"  # not portable; use a different approach
+  i=$((i+1))
+done
+
+# Reset and use a clean loop
+passthrough=()
+out_file=""
+next_is_output=0
+for arg in "$@"; do
+  if [[ $next_is_output -eq 1 ]]; then
+    out_file="$arg"
+    next_is_output=0
+    continue
+  fi
+  case "$arg" in
+    -o|--output|--output-file)
+      next_is_output=1
+      ;;
+    -o=*|--output=*|--output-file=*)
+      out_file="${arg#*=}"
+      ;;
+    *)
+      passthrough+=("$arg")
+      ;;
+  esac
+done
+
+if [[ -n "$out_file" ]]; then
+  exec scanimage -d "$DEVICE" --format png --resolution 300 --mode Color "${passthrough[@]}" > "$out_file"
+else
+  exec scanimage -d "$DEVICE" --format png --resolution 300 --mode Color "${passthrough[@]}"
+fi

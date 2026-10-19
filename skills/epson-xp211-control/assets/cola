@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# cola — print queue inspection (lpq-style for the Epson XP-211).
+# Shows pending and recently completed jobs for this queue only.
+
+set -uo pipefail
+
+QUEUE="EPSON_XP-211_214_216_Series"
+
+echo "=== Cola activa ($QUEUE) ==="
+if pending=$(lpstat -o "$QUEUE" 2>&1); then
+  if [[ -z "$pending" ]]; then
+    echo "  (sin trabajos pendientes)"
+  else
+    echo "$pending"
+  fi
+else
+  echo "  FAIL: cola '$QUEUE' no encontrada"
+  exit 1
+fi
+
+echo
+echo "=== Últimos 5 trabajos completados ==="
+if completed=$(lpstat -W completed -o 2>&1 | grep -F "$QUEUE" | tail -n 5); then
+  if [[ -z "$completed" ]]; then
+    echo "  (sin historial reciente)"
+  else
+    echo "$completed"
+  fi
+fi

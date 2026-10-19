@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# imprimir — wrapper around `lp` with safe defaults for the Epson XP-211.
+# Usage:
+#   imprimir [lp-options] <file>
+# Examples:
+#   imprimir doc.pdf
+#   imprimir -n 2 doc.pdf
+#   imprimir -o print-color-mode=monochrome doc.pdf
+#   imprimir -o PrintQuality=High -o MediaType=PremiumPhoto photo.jpg
+#
+# This wrapper intentionally does NOT impose any defaults — it passes
+# everything through to lp. The point is one entry point with the right
+# queue name and a pre-flight check.
+
+set -euo pipefail
+
+QUEUE="EPSON_XP-211_214_216_Series"
+
+# Pre-flight: queue must be ready
+if ! lpstat -p "$QUEUE" >/dev/null 2>&1; then
+  echo "ERROR: queue '$QUEUE' does not exist or is not ready." >&2
+  echo "  Run: lpstat -p       # to see available queues" >&2
+  echo "  Or:  references/diagnose-environment.sh" >&2
+  exit 2
+fi
+
+# Always prepend -d <queue>; let the rest pass through to lp
+exec lp -d "$QUEUE" "$@"

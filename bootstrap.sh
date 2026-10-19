@@ -176,7 +176,6 @@ _dump_failure() {
 
 PI_SKILLS=(
   "https://github.com/cathrynlavery/diagram-design"
-  "npm:@lucascardozo/pi-edit-guard"   # own Pi ext: indentation-drift recovery on edit
   "npm:@estebanforge/pi-codegraph-enhanced"  # CodeGraph native ext, fork of @vndv/pi-codegraph with startup auto-index (needs `@colbymchenry/codegraph` CLI on PATH)
 )
 
@@ -228,6 +227,10 @@ AGENTS_SKILLS=(
   # the upstream monorepo (NOT the repo root). Drops test/ + the npm
   # lockfile post-install (dev-only, not needed at skill runtime).
   "https://github.com/tt-a1i/archify|archify|v2.10.0"
+  # Motion (motiondivision/ai-kit): animation skill for Motion (prev Framer
+  # Motion) and CSS animation — best practices, docs/examples search, springs,
+  # MotionScore audits.
+  "https://github.com/motiondivision/ai-kit|plugins/motion/skills/motion|main"
   # firecrawl/anydoc (MIT) — Office docs / PDFs (docx/pptx/xlsx/odt/pdf/csv/rtf/epub)
   # → GFM Markdown via `npx -y @firecrawl/anydoc`. OCR hosted opcional con
   # FIRECRAWL_API_KEY. Requiere Node 20+. Re-pinear a un tag estable cuando exista.
@@ -433,16 +436,6 @@ if [[ -f "$DOTFILES_DIR/agent/web-search.json" ]]; then
   ok "web-search.json → ~/.pi/agent/"
 else
   warn "agent/web-search.json missing from bundle — skip web-search config install"
-fi
-
-# pi-edit-guard global config (auto-format on edit). Copy from bundle so it's
-# versionable. Project-level overrides are NOT touched here.
-if [[ -f "$DOTFILES_DIR/agent/edit-guard.json" ]]; then
-  mkdir -p "$HOME/.pi/agent"
-  cp "$DOTFILES_DIR/agent/edit-guard.json" "$HOME/.pi/agent/edit-guard.json"
-  ok "edit-guard.json → ~/.pi/agent/"
-else
-  warn "agent/edit-guard.json missing from bundle — skip edit-guard config install"
 fi
 
 # gentle-pi provider profiles (model + thinking config for review/agent roles).

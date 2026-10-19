@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# estado — combined state check: CUPS + SANE + daemon + mDNS.
+# Single command, readable output.
+
+set -uo pipefail
+
+QUEUE="EPSON_XP-211_214_216_Series"
+IP="192.168.1.41"
+HOST="EPSONDCDFC5.local"
+
+echo "=== Impresora (CUPS) ==="
+if state=$(lpstat -p "$QUEUE" 2>&1); then
+  echo "  Cola:    $state"
+  model=$(lpoptions -p "$QUEUE" 2>/dev/null | grep -o "printer-make-and-model='[^']*'" | sed "s/printer-make-and-model='//;s/'$//")
+  echo "  Driver:  $model"
+  uri=$(lpoptions -p "$QUEUE" 2>/dev/null | grep -o "device-uri=[^ ]*" | sed 's/device-uri=//')
+  echo "  URI:     $uri"
+else
+  echo "  FAIL: cola '$QUEUE' no encontrada"
+fi
+
+echo
+echo "=== Trabajos encolados ==="
+if jobs=$(lpstat -o "$QUEUE" 2>&1); then
+  if [[ -z "$jobs" ]]; then
+    echo "  (ninguno)"
+  else
+    echo "$jobs" | sed 's/^/  /'
+  fi
+else
+  echo "  (no se pudo consultar)"
+fi
+
+echo
+echo "=== Escáner (SANE) ==="
+if sane=$(scanimage -L 2>&1 | grep -F "epson2:net:${IP}"); then
+  echo "  OK: $sane"
+else
+  echo "  FAIL: epson2:net:${IP} no detectado"
+  echo "        Revisar: scanimage -L"
+fi
+
+echo
+echo "=== Daemon (ecbd) ==="
+ecbd=$(systemctl is-active ecbd 2>&1)
+if [[ "$ecbd" == "active" ]]; then
+  echo "  OK: $ecbd (USB only — WiFi funciona sin él)"
+else
+  echo "  $ecbd (no afecta el flujo WiFi)"
+fi
+
+echo
+echo "=== Red (mDNS) ==="
+if resolved=$(getent hosts "$HOST" 2>&1); then
+  echo "  OK: $resolved"
+else
+  echo "  FAIL: $HOST no resuelve. ¿La impresora está encendida y en la misma red?"
+fi
