@@ -19,8 +19,7 @@
 #                                   # without asking (unattended runs)
 #
 # Overwrite prompts: the copied configs that can hold runtime edits
-# (gentle-ai/profiles.json, agent/models.json) ask before replacing a
-# differing runtime copy — Enter/y/yes replaces, anything else keeps. With no
+# (gentle-ai/profiles.json) ask before replacing a differing runtime copy — Enter/y/yes replaces, anything else keeps. With no
 # terminal (cron, CI, piped stdin) the runtime copy is kept, never
 # overwritten silently and never hung on; -y / --yes (or DOTFILES_ASSUME_YES=1)
 # answers every prompt with yes and restores the unconditional clobber.
@@ -54,17 +53,13 @@ Usage: ./bootstrap.sh [--verbose] [-y]
               installed item, ? for the overwrite question, ! for warnings
   -v, --verbose  stream every command's output live (debugging)
   -y, --yes   answer every overwrite prompt with yes: differing config
-              copies (gentle-ai/profiles.json, agent/models.json) are
-              replaced without asking. For unattended runs.
+              copies (gentle-ai/profiles.json) are replaced without
+              asking. For unattended runs.
 
   DOTFILES_VERBOSE=1 does the same as --verbose.
   DOTFILES_ASSUME_YES=1 does the same as -y.
   DOTFILES_JOBS=<n>  concurrent skill installs (default 6, 1 = sequential).
   NEXT_DOCS_VERSION=<v> pins the Next.js docs snapshot version.
-  API keys: bootstrap reads one environment variable per provider — the
-  provider name uppercased with non-alphanumerics turned into _ plus
-  "_API_KEY" (provider `nan` -> NAN_API_KEY). No variable means apiKey="".
-  Keys are read by jq from its own environment, never from an argument.
 USAGE
               exit 0 ;;
     *) echo "bootstrap.sh: unknown argument: $arg" >&2; exit 2 ;;
@@ -83,8 +78,8 @@ ok()   { echo "  ✓ $*"; }
 warn() { echo "  ! $*" >&2; }
 
 # ask_overwrite CANDIDATE TARGET LABEL — decide whether TARGET (the installed
-# runtime copy) may be replaced by CANDIDATE (the bundle copy, or the already
-# rendered temp file for models.json). Returns 0 = replace, 1 = keep. Both
+# runtime copy) may be replaced by CANDIDATE (the bundle copy). Returns
+# 0 = replace, 1 = keep. Both
 # clobber sites go through this helper so the overwrite semantics cannot
 # drift apart. Nothing is printed when there is nothing to decide.
 ask_overwrite() {
@@ -410,21 +405,6 @@ fi
 # === Config files ===
 step "Config files"
 
-# Themes: Pi visual config. Copy every themes/*.json from the bundle so each
-# one is versionable. The loop is the mechanism, not a shipped artifact: the
-# bundle currently ships no theme, and an empty themes/ must be a silent no-op
-# rather than a permanent "missing from bundle" warning on every run.
-if [[ -d "$DOTFILES_DIR/themes" ]]; then
-  for theme_file in "$DOTFILES_DIR"/themes/*.json; do
-    # No nullglob here: an unmatched glob stays literal, so test before copying.
-    [[ -f "$theme_file" ]] || continue
-    theme_id="$(basename "$theme_file")"
-    mkdir -p "$HOME/.pi/agent/themes"
-    cp "$theme_file" "$HOME/.pi/agent/themes/$theme_id"
-    ok "$theme_id → ~/.pi/agent/themes/"
-  done
-fi
-
 # pi-web-access (formerly pi-web-search) config. Copy from bundle so it's
 # versionable. Destination is the loader path the ext actually reads
 # (getWebSearchConfigDir() in utils.ts falls back to ~/.pi/agent/web-search.json
@@ -452,101 +432,12 @@ if [[ -f "$DOTFILES_DIR/gentle-ai/profiles.json" ]]; then
     ok "gentle-ai/profiles.json → ~/.pi/gentle-ai/"
   fi
 else
-  warn "gentle-ai/profiles.json missing from bundle — skip gentle-ai profiles install"
+  warn "gentle-ai/profiles.json missing from bundle — skip gentle-pi profiles install"
 fi
 
-# Custom model providers config. The bundle is the source of truth for the
-# provider list, the models and their metadata, and the API keys come from the
-# environment: provider `nan` reads NAN_API_KEY (provider name uppercased, every
-# non-alphanumeric turned into _). No variable -> apiKey="". See AGENTS.md
-# "API keys pattern".
-#
-# Overwrite-installed (confirmed) so a provider or model added to the bundle
-# reaches the machine at the next bootstrap. The runtime file holds no
-# irreplaceable state (keys live in the environment, not in the file), so a
-# malformed runtime copy is simply replaced instead of being preserved or
-# repaired. The replacement is confirmed by ask_overwrite; -y restores the
-# old unconditional clobber for scripted runs.
-if [[ -f "$DOTFILES_DIR/agent/models.json" ]]; then
-  mkdir -p "$HOME/.pi/agent"
-  runtime_models="$HOME/.pi/agent/models.json"
-  # umask 077 + same-directory temp + mv: the replacement is atomic and never
-  # exposes a half-written credentials file or a momentarily widened mode.
-  # Sweep temps left behind by a previous run that died without running its trap
-  # (SIGKILL, power loss, a killed container). The rendered temp holds the
-  # env-derived API keys, and an untrappable death is the one path no trap can
-  # cover — so a leftover must not survive into the next run. Only this script
-  # creates these names, and the script already treats ~/.pi/agent/ as its own
-  # (it replaces models.json wholesale), so removing them all is safe.
-  rm -f "$HOME/.pi/agent"/.models.json.* 2>/dev/null || true
-  models_tmp="$(umask 077; mktemp "$HOME/.pi/agent/.models.json.XXXXXX")"
-  models_dropped=""; models_lost=""
-  # The rendered temp now lives ACROSS the overwrite prompt, so a Ctrl-C (or any
-  # trappable fatal signal) while a human deliberates would park a copy of the
-  # env-derived API keys in ~/.pi/agent/ — a window that used to last
-  # microseconds. The EXIT trap covers the interrupt paths; on the normal path
-  # the replace branch's `mv` and the keep branch's `rm -f` already deal with it,
-  # so this is a no-op there.
-  trap 'rm -f "$models_tmp"' EXIT
-  # jq reads $ENV itself: the key never reaches an argv, so it cannot show up in
-  # `ps`, and no bash-4-only uppercasing is needed (macOS ships bash 3.2).
-  jq '.providers |= with_entries(
-        . as $e
-        | .value.apiKey = ($ENV[($e.key | ascii_upcase | gsub("[^A-Z0-9]"; "_")) + "_API_KEY"] // "")
-      )' "$DOTFILES_DIR/agent/models.json" > "$models_tmp"
-  # Decide BEFORE reporting: the dropped-provider and removed-key warnings
-  # describe a mutation. If the runtime copy is kept, neither mutation
-  # happened, so both computations and their warnings live inside the replace
-  # branch — printing them on keep would describe a change that did not occur.
-  if ask_overwrite "$models_tmp" "$runtime_models" "models.json"; then
-    if [[ -f "$runtime_models" ]]; then
-      # Work out what this run removes BEFORE removing it, so the removal can be
-      # reported instead of discovered later as a broken role.
-      models_dropped="$(jq -r --slurpfile b "$DOTFILES_DIR/agent/models.json" \
-        'if (.providers | type) == "object"
-         then ((.providers | keys) - ($b[0].providers | keys) | join(", "))
-         else "" end' "$runtime_models" 2>/dev/null || true)"
-      # Only providers that survive this run count as a lost key: one that is being
-      # dropped entirely is already reported by the provider warning above.
-      models_lost="$(jq -r --slurpfile new "$models_tmp" \
-        '[.providers | to_entries[] | . as $e
-          | select($e.value.apiKey != ""
-                   and ($new[0].providers | has($e.key))
-                   and (($new[0].providers[$e.key].apiKey // "") == ""))
-          | $e.key] | join(", ")' \
-        "$runtime_models" 2>/dev/null || true)"
-    fi
-    chmod 600 "$models_tmp"
-    mv "$models_tmp" "$runtime_models"
-    ok "models.json → ~/.pi/agent/ ($(jq '.providers | length' "$runtime_models") provider(s); $(jq '[.providers[] | select(.apiKey != "")] | length' "$runtime_models") key(s) from the environment)"
-    # Proper `if` instead of the `[[ -n ... ]] && warn ...` idiom: the old one
-    # only survived `set -e` because the failing test precedes the final `&&`,
-    # and this nesting is too deep to rely on that subtlety.
-    if [[ -n "$models_dropped" ]]; then
-      warn "models.json — provider(s) absent from the bundle were dropped: $models_dropped"
-    fi
-    if [[ -n "$models_lost" ]]; then
-      warn "models.json — API key(s) REMOVED because no <PROVIDER>_API_KEY is set: $models_lost"
-    fi
-  else
-    # Keep branch: the CONTENT is never rewritten, and the temp is removed so
-    # no half-rendered copy is left in ~/.pi/agent/. But the old unconditional
-    # clobber was also what re-tightened the mode of a file holding API keys;
-    # leaving a hand-created world-readable copy would be a security
-    # regression introduced by the prompt, so the mode is still enforced.
-    rm -f "$models_tmp"
-    # Read the mode portably (GNU stat first, then BSD, as elsewhere in this
-    # script's macOS accommodations). Fail closed: an empty/unavailable mode
-    # counts as "not 600" so the chmod still happens.
-    models_mode="$(stat -c '%a' "$runtime_models" 2>/dev/null || stat -f '%Lp' "$runtime_models" 2>/dev/null || echo "")"
-    if [[ "$models_mode" != "600" ]]; then
-      chmod 600 "$runtime_models"
-      warn "models.json — runtime copy kept, but its mode was tightened to 600 (it holds API keys)"
-    fi
-  fi
-else
-  warn "agent/models.json missing from bundle — skip models config install"
-fi
+# NOTE: model providers (~/.pi/agent/models.json) and themes are NOT managed
+# by this bundle — they are machine-local state. A fresh machine must set up
+# its own providers (and their API keys) directly in ~/.pi/agent/models.json.
 
 # === Local skills ===
 step "Local skills (${local_count})"
