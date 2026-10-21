@@ -200,8 +200,11 @@ AGENTS_SKILLS=(
   # Typst authoring (docs mirrored locally, no network at use time)
   "https://github.com/apcamargo/typst-skills|typst-author|main"
   "https://github.com/apcamargo/typst-skills|touying-author|main"
-  # Media generation via mmx CLI (text/image/video/speech/music/vision/search)
-  "https://github.com/MiniMax-AI/skills|skills/minimax-multimodal-toolkit|main"
+  # Media generation via mmx CLI (text/image/video/speech/music/vision/search).
+  # The skill lives at the repo root under skill/ (not skills/<id>/), so the
+  # 4th field pins the installed id to mmx-cli — the skill's own frontmatter
+  # name — instead of the subpath basename.
+  "https://github.com/MiniMax-AI/cli|skill|main|mmx-cli"
   # Prisma ORM skills (Prisma 7.x — official prisma/skills repo)
   # Targets self-hosted Postgres (Neon/Supabase/RDS/local) via prisma-database-setup.
   # prisma-postgres and prisma-postgres-setup are intentionally NOT included:
@@ -230,9 +233,10 @@ AGENTS_SKILLS=(
   # → GFM Markdown via `npx -y @firecrawl/anydoc`. OCR hosted opcional con
   # FIRECRAWL_API_KEY. Requiere Node 20+. Re-pinear a un tag estable cuando exista.
   "https://github.com/firecrawl/anydoc|skills/convert-documents-to-markdown|main"
-  # "<repo-url>|<subpath-inside-repo>|<ref>"
+  # "<repo-url>|<subpath-inside-repo>|<ref>[|<id>]"
   # example: clone just one subfolder of a monorepo into ~/.agents/skills/<id>
-  # "https://github.com/MiniMax-AI/skills|skills/android-native-dev|main"
+  # "https://github.com/owner/repo|skills/<id>|main"
+  # the optional 4th field overrides the installed id (default: subpath basename)
 )
 
 # Pre-count entries for the section banners. AGENTS_SKILLS entries are
