@@ -1,0 +1,651 @@
+#!/usr/bin/env python3
+"""calc - deterministic calculation CLI for agents (skill: math-calc).
+
+Single entry point. It routes each request to the right engine and normalizes
+the output so that an agent can copy it verbatim.
+
+Usage:
+  calc --check
+  calc eval <expr> [--prec N]
+  calc exact <expr>
+  calc simplify <expr>
+  calc diff <expr> <var>
+  calc int <expr> <var> [lower] [upper]
+  calc solve <equation> [var]
+  calc stats <list>
+  calc bc <expr>
+  calc python <code>
+
+Output contract:
+  stdout  the result, ASCII only, decimal point, one value per line
+  stderr  "ERROR: ..." and optionally "HINT: ..."
+  exit    0 ok | 2 expression or domain error | 3 missing dependency | 4 internal error
+"""
+
+import ast
+import math
+import os
+import signal
+import statistics
+import subprocess
+import sys
+from decimal import Decimal, localcontext, ROUND_CEILING, ROUND_FLOOR
+
+EXIT_OK = 0
+EXIT_EXPR = 2
+EXIT_DEP = 3
+EXIT_INTERNAL = 4
+
+WRAPPER_PATH = os.path.abspath(__file__)
+SKILL_DIR = os.path.dirname(os.path.dirname(WRAPPER_PATH))
+
+# Interpreters searched for one that can import sympy, in order:
+#   1. MATH_CALC_PYTHON (explicit override)
+#   2. the venv bundled with this skill
+#   3. the venv the user may have created at ~/.local/share/math-calc-venv
+#   4. the interpreter running this script
+VENV_CANDIDATES = [
+    os.path.join(SKILL_DIR, ".venv", "bin", "python"),
+    os.path.expanduser("~/.local/share/math-calc-venv/bin/python"),
+]
+
+HINT_SYMPY = (
+    "sudo pacman -S python-sympy            # Arch / CachyOS\n"
+    "       or: sudo apt install python3-sympy        # Debian / Ubuntu\n"
+    "       or: uv venv ~/.local/share/math-calc-venv && "
+    "uv pip install --python ~/.local/share/math-calc-venv/bin/python sympy"
+)
+HINT_BC = "sudo pacman -S bc            # Arch / CachyOS"
+
+
+class CalcError(Exception):
+    """Any failure that must reach the caller as a documented exit code."""
+
+    def __init__(self, message, code=EXIT_EXPR, hint=None):
+        super().__init__(message)
+        self.code = code
+        self.hint = hint
+
+
+# ---------------------------------------------------------------------------
+# interpreter selection
+# ---------------------------------------------------------------------------
+
+def _can_import(python, module):
+    try:
+        proc = subprocess.run(
+            [python, "-c", "import %s" % module],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
+def _pick_interpreter():
+    override = os.environ.get("MATH_CALC_PYTHON")
+    candidates = []
+    if override:
+        candidates.append(override)
+    candidates.extend(VENV_CANDIDATES)
+    candidates.append(sys.executable)
+
+    existing = [c for c in candidates if c and os.path.exists(c)]
+    if override and not os.path.exists(override):
+        raise CalcError(
+            "MATH_CALC_PYTHON points to a missing interpreter: %s" % override,
+            EXIT_INTERNAL,
+        )
+    for candidate in existing:
+        if _can_import(candidate, "sympy"):
+            return candidate
+    return existing[0] if existing else sys.executable
+
+
+# ---------------------------------------------------------------------------
+# float / decimal expression evaluation (stdlib only)
+# ---------------------------------------------------------------------------
+
+FLOAT_FUNCS = {
+    "abs": abs,
+    "acos": math.acos,
+    "acosh": math.acosh,
+    "asin": math.asin,
+    "asinh": math.asinh,
+    "atan": math.atan,
+    "atan2": math.atan2,
+    "atanh": math.atanh,
+    "ceil": math.ceil,
+    "cos": math.cos,
+    "cosh": math.cosh,
+    "degrees": math.degrees,
+    "exp": math.exp,
+    "factorial": math.factorial,
+    "floor": math.floor,
+    "gcd": math.gcd,
+    "hypot": math.hypot,
+    "lcm": math.lcm,
+    "log": math.log,
+    "log2": math.log2,
+    "log10": math.log10,
+    "max": max,
+    "min": min,
+    "pow": pow,
+    "radians": math.radians,
+    "round": lambda x, n=0: round(x, int(n)),
+    "sin": math.sin,
+    "sinh": math.sinh,
+    "sqrt": math.sqrt,
+    "tan": math.tan,
+    "tanh": math.tanh,
+}
+
+
+def _decimal_funcs():
+    return {
+        "abs": abs,
+        "ceil": lambda x: x.to_integral_value(rounding=ROUND_CEILING),
+        "exp": lambda x: x.exp(),
+        "floor": lambda x: x.to_integral_value(rounding=ROUND_FLOOR),
+        "log": lambda x: x.ln(),
+        "log10": lambda x: x.log10(),
+        "max": max,
+        "min": min,
+        "pow": pow,
+        "sqrt": lambda x: x.sqrt(),
+        "tan": lambda x: x.tan(),
+        "cos": lambda x: x.cos(),
+        "sin": lambda x: x.sin(),
+    }
+
+
+class Evaluator:
+    """Restricted AST evaluator: numbers, arithmetic and whitelisted calls."""
+
+    def __init__(self, mode="float"):
+        self.mode = mode
+        if mode == "float":
+            self.consts = {"pi": math.pi, "e": math.e, "tau": math.tau}
+            self.funcs = FLOAT_FUNCS
+        else:
+            self.consts = {
+                "pi": Decimal(repr(math.pi)),
+                "e": Decimal(repr(math.e)),
+                "tau": Decimal(repr(math.tau)),
+            }
+            self.funcs = _decimal_funcs()
+
+    def evaluate(self, source):
+        try:
+            tree = ast.parse(source.strip(), mode="eval")
+        except SyntaxError as exc:
+            raise CalcError("syntax error in expression: %s" % exc.msg)
+        return self._node(tree.body)
+
+    def _node(self, node):
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool):
+                raise CalcError("booleans are not numeric values")
+            if isinstance(node.value, (int, float)):
+                if self.mode == "decimal":
+                    return Decimal(repr(node.value)) if isinstance(node.value, float) \
+                        else Decimal(node.value)
+                return node.value
+            raise CalcError("unsupported literal: %r" % (node.value,))
+
+        if isinstance(node, ast.BinOp):
+            left = self._node(node.left)
+            right = self._node(node.right)
+            op = type(node.op)
+            try:
+                if op is ast.Add:
+                    return left + right
+                if op is ast.Sub:
+                    return left - right
+                if op is ast.Mult:
+                    return left * right
+                if op is ast.Div:
+                    if right == 0:
+                        raise CalcError("division by zero")
+                    return left / right
+                if op is ast.FloorDiv:
+                    if right == 0:
+                        raise CalcError("division by zero")
+                    return left // right
+                if op is ast.Mod:
+                    if right == 0:
+                        raise CalcError("modulo by zero")
+                    return left % right
+                if op is ast.Pow:
+                    return left ** right
+            except CalcError:
+                raise
+            except (ValueError, OverflowError, TypeError, ZeroDivisionError) as exc:
+                raise CalcError("invalid operation: %s" % exc)
+            raise CalcError("unsupported operator: %s" % op.__name__)
+
+        if isinstance(node, ast.UnaryOp):
+            value = self._node(node.operand)
+            if isinstance(node.op, ast.UAdd):
+                return value
+            if isinstance(node.op, ast.USub):
+                return -value
+            raise CalcError("unsupported unary operator")
+
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                raise CalcError("unsupported call form: only plain function calls are allowed")
+            name = node.func.id
+            if name not in self.funcs:
+                raise CalcError("unknown function: %s" % name)
+            args = [self._node(arg) for arg in node.args]
+            try:
+                return self.funcs[name](*args)
+            except CalcError:
+                raise
+            except (ValueError, OverflowError, TypeError, ZeroDivisionError) as exc:
+                raise CalcError("invalid arguments for %s(): %s" % (name, exc))
+
+        if isinstance(node, ast.Name):
+            if node.id in self.consts:
+                return self.consts[node.id]
+            raise CalcError("unknown name: %s" % node.id)
+
+        raise CalcError("unsupported expression element: %s" % type(node).__name__)
+
+
+def format_float(value):
+    number = float(value)
+    if math.isnan(number):
+        raise CalcError("result is NaN")
+    if math.isinf(number):
+        raise CalcError("result is infinite")
+    return "%.12g" % number
+
+
+def format_decimal(value, precision):
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    if text in ("", "-", "-0"):
+        text = "0"
+    return text
+
+
+# ---------------------------------------------------------------------------
+# sympy
+# ---------------------------------------------------------------------------
+
+def load_sympy():
+    if os.environ.get("MATH_CALC_NO_SYMPY") == "1":
+        raise CalcError("sympy is required for this mode but is not available",
+                        EXIT_DEP, HINT_SYMPY)
+    try:
+        import sympy
+    except Exception as exc:
+        raise CalcError("sympy is required for this mode but is not importable: %s" % exc,
+                        EXIT_DEP, HINT_SYMPY)
+    return sympy
+
+
+def sympy_locals(sympy):
+    names = (
+        "Abs", "E", "I", "Matrix", "N", "Rational", "Symbol", "binomial",
+        "cos", "det", "exp", "factorial", "gcd", "lcm", "log", "oo", "pi",
+        "sin", "sqrt", "tan",
+    )
+    local = {}
+    for name in names:
+        value = getattr(sympy, name, None)
+        if value is not None:
+            local[name] = value
+    local["e"] = local.get("E", sympy.E)
+    local["inf"] = local.get("oo", sympy.oo)
+    local["inv"] = lambda matrix: matrix.inv()
+    return local
+
+
+class _Timeout(Exception):
+    pass
+
+
+def _alarm_handler(signum, frame):
+    raise _Timeout()
+
+
+def sympy_with_timeout(function, seconds=20):
+    previous = signal.signal(signal.SIGALRM, _alarm_handler)
+    signal.alarm(seconds)
+    try:
+        return function()
+    except _Timeout:
+        raise CalcError("calculation exceeded %ds and was aborted" % seconds)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def sympy_parse(sympy, source):
+    try:
+        return sympy.sympify(source.strip(), rational=True, locals=sympy_locals(sympy))
+    except CalcError:
+        raise
+    except Exception as exc:
+        raise CalcError("cannot parse expression: %s" % exc)
+
+
+def sympy_simplify(sympy, expression):
+    try:
+        return sympy_with_timeout(lambda: sympy.simplify(expression), 20)
+    except CalcError:
+        raise
+    except Exception:
+        return expression
+
+
+# ---------------------------------------------------------------------------
+# modes
+# ---------------------------------------------------------------------------
+
+def mode_check():
+    lines = ["wrapper %s" % WRAPPER_PATH]
+    lines.append("python  %s  %s" % (platform_version(), sys.executable))
+
+    if os.environ.get("MATH_CALC_NO_SYMPY") == "1":
+        lines.append("sympy   DISABLED (MATH_CALC_NO_SYMPY=1)")
+    else:
+        try:
+            import sympy
+            lines.append("sympy   OK  %s" % sympy.__version__)
+        except Exception:
+            lines.append("sympy   MISSING  %s" % HINT_SYMPY.splitlines()[0].strip())
+
+    bc_version = _bc_version()
+    if bc_version:
+        lines.append("bc      OK  %s" % bc_version)
+    else:
+        lines.append("bc      MISSING  %s" % HINT_BC)
+
+    try:
+        import numpy
+        lines.append("numpy   OK  %s" % numpy.__version__)
+    except Exception:
+        lines.append("numpy   MISSING")
+    return "\n".join(lines)
+
+
+def platform_version():
+    return "%d.%d.%d" % sys.version_info[:3]
+
+
+def _bc_version():
+    try:
+        proc = subprocess.run(["bc", "--version"], stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, timeout=10)
+        if proc.returncode == 0:
+            return proc.stdout.decode().strip().splitlines()[0]
+    except Exception:
+        pass
+    return None
+
+
+def mode_eval(args):
+    precision = None
+    expression = None
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--prec":
+            index += 1
+            if index >= len(args):
+                raise CalcError("--prec requires a number")
+            try:
+                precision = int(args[index])
+            except ValueError:
+                raise CalcError("--prec requires an integer, got %r" % args[index])
+            if precision < 1 or precision > 100:
+                raise CalcError("--prec must be between 1 and 100")
+        elif token.startswith("--prec="):
+            try:
+                precision = int(token.split("=", 1)[1])
+            except ValueError:
+                raise CalcError("--prec requires an integer")
+            if precision < 1 or precision > 100:
+                raise CalcError("--prec must be between 1 and 100")
+        else:
+            expression = token
+        index += 1
+
+    if expression is None:
+        raise CalcError("eval requires an expression")
+
+    if precision is None:
+        value = Evaluator("float").evaluate(expression)
+        return format_float(value)
+
+    with localcontext() as context:
+        context.prec = precision
+        value = Evaluator("decimal").evaluate(expression)
+        return format_decimal(value, precision)
+
+
+def mode_exact(args, simplify=True):
+    if not args:
+        raise CalcError("exact requires an expression")
+    sympy = load_sympy()
+    expression = sympy_parse(sympy, " ".join(args))
+    if simplify:
+        expression = sympy_simplify(sympy, expression)
+    return str(expression)
+
+
+def mode_diff(args):
+    if len(args) < 2:
+        raise CalcError("diff requires an expression and a variable")
+    sympy = load_sympy()
+    expression = sympy_parse(sympy, args[0])
+    variable = args[1]
+    if not variable.isidentifier():
+        raise CalcError("invalid variable name: %s" % variable)
+    result = sympy_with_timeout(lambda: sympy.diff(expression, sympy.Symbol(variable)))
+    return str(result)
+
+
+def mode_integrate(args):
+    if len(args) < 2:
+        raise CalcError("int requires an expression and a variable")
+    sympy = load_sympy()
+    expression = sympy_parse(sympy, args[0])
+    variable = args[1]
+    if not variable.isidentifier():
+        raise CalcError("invalid variable name: %s" % variable)
+    symbol = sympy.Symbol(variable)
+    if len(args) >= 4:
+        lower = sympy_parse(sympy, args[2])
+        upper = sympy_parse(sympy, args[3])
+        result = sympy_with_timeout(lambda: sympy.integrate(expression, (symbol, lower, upper)))
+    else:
+        result = sympy_with_timeout(lambda: sympy.integrate(expression, symbol))
+    return str(result)
+
+
+def mode_solve(args):
+    if not args:
+        raise CalcError("solve requires an equation")
+    sympy = load_sympy()
+    source = args[0]
+    if "=" in source:
+        left, right = source.split("=", 1)
+        right = right.strip() or "0"
+        equation = sympy.Eq(sympy_parse(sympy, left), sympy_parse(sympy, right))
+    else:
+        equation = sympy_parse(sympy, source)
+    if equation is sympy.true:
+        raise CalcError("the equation is an identity: every value is a solution")
+    if equation is sympy.false:
+        return "no solutions"
+    if len(args) >= 2:
+        variable = args[1]
+        if not variable.isidentifier():
+            raise CalcError("invalid variable name: %s" % variable)
+        symbol = sympy.Symbol(variable)
+    else:
+        symbols = sorted(equation.free_symbols, key=lambda s: s.name)
+        if len(symbols) != 1:
+            raise CalcError("solve needs exactly one variable; pass it as the second argument")
+        symbol = symbols[0]
+    solutions = sympy_with_timeout(lambda: sympy.solve(equation, symbol))
+    if not solutions:
+        return "no solutions"
+    return "\n".join("%s = %s" % (symbol.name, solution) for solution in solutions)
+
+
+def mode_stats(args):
+    if not args:
+        raise CalcError("stats requires a list of numbers")
+    raw = " ".join(args).strip()
+    raw = raw.strip("[]()")
+    raw = raw.replace(";", ",")
+    parts = [part.strip() for part in raw.split(",") if part.strip()]
+    if len(parts) < 2:
+        raise CalcError("stats needs at least two numbers")
+    try:
+        values = [float(part) for part in parts]
+    except ValueError:
+        raise CalcError("stats only accepts numeric values")
+
+    rows = [
+        ("count", len(values)),
+        ("mean", statistics.mean(values)),
+        ("median", statistics.median(values)),
+        ("stdev", statistics.stdev(values)),
+        ("variance", statistics.variance(values)),
+        ("min", min(values)),
+        ("max", max(values)),
+    ]
+    lines = []
+    for label, value in rows:
+        if isinstance(value, int):
+            lines.append("%s: %d" % (label, value))
+        elif isinstance(value, float) and value.is_integer():
+            lines.append("%s: %d" % (label, int(value)))
+        else:
+            lines.append("%s: %s" % (label, repr(value)))
+    return "\n".join(lines)
+
+
+def mode_bc(args):
+    if not args:
+        raise CalcError("bc requires an expression")
+    if _bc_version() is None:
+        raise CalcError("bc is required for this mode but is not installed", EXIT_DEP, HINT_BC)
+    proc = subprocess.run(["bc", "-l"], input=(" ".join(args) + "\n").encode(),
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    output = proc.stdout.decode().strip()
+    if proc.returncode != 0:
+        raise CalcError("bc failed: %s" % proc.stderr.decode().strip())
+    return output
+
+
+def mode_python(args):
+    if not args:
+        raise CalcError("python requires a code snippet")
+    code = " ".join(args)
+    try:
+        proc = subprocess.run([sys.executable, "-c", code], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=120)
+    except subprocess.TimeoutExpired:
+        raise CalcError("python snippet exceeded 120s and was aborted")
+    stdout = proc.stdout.decode()
+    if proc.returncode != 0:
+        raise CalcError("python snippet failed: %s" % proc.stderr.decode().strip())
+    return stdout.strip()
+
+
+# ---------------------------------------------------------------------------
+# entry point
+# ---------------------------------------------------------------------------
+
+USAGE = """calc - deterministic calculation CLI
+
+  calc --check
+  calc eval <expr> [--prec N]
+  calc exact <expr>
+  calc simplify <expr>
+  calc diff <expr> <var>
+  calc int <expr> <var> [lower] [upper]
+  calc solve <equation> [var]
+  calc stats <list>
+  calc bc <expr>
+  calc python <code>"""
+
+
+def dispatch(argv):
+    if not argv:
+        raise CalcError("no command given\n%s" % USAGE)
+    command = argv[0]
+    rest = argv[1:]
+
+    if command in ("--check", "check"):
+        return mode_check()
+    if command == "--help" or command == "-h" or command == "help":
+        return USAGE
+    if command == "eval":
+        return mode_eval(rest)
+    if command == "exact":
+        return mode_exact(rest, simplify=True)
+    if command == "simplify":
+        return mode_exact(rest, simplify=True)
+    if command == "diff":
+        return mode_diff(rest)
+    if command == "int" or command == "integrate":
+        return mode_integrate(rest)
+    if command == "solve":
+        return mode_solve(rest)
+    if command == "stats":
+        return mode_stats(rest)
+    if command == "bc":
+        return mode_bc(rest)
+    if command == "python":
+        return mode_python(rest)
+    raise CalcError("unknown command: %s\n%s" % (command, USAGE))
+
+
+def main():
+    try:
+        interpreter = _pick_interpreter()
+    except CalcError as exc:
+        sys.stderr.write("ERROR: %s\n" % exc)
+        if exc.hint:
+            sys.stderr.write("HINT: %s\n" % exc.hint)
+        return exc.code
+    if os.path.realpath(interpreter) != os.path.realpath(sys.executable):
+        try:
+            os.execv(interpreter, [interpreter, WRAPPER_PATH] + sys.argv[1:])
+        except OSError as exc:
+            sys.stderr.write("ERROR: cannot switch to interpreter %s: %s\n" % (interpreter, exc))
+            return EXIT_INTERNAL
+
+    try:
+        output = dispatch(sys.argv[1:])
+    except CalcError as exc:
+        sys.stderr.write("ERROR: %s\n" % exc)
+        if exc.hint:
+            sys.stderr.write("HINT: %s\n" % exc.hint)
+        return exc.code
+    except KeyboardInterrupt:
+        sys.stderr.write("ERROR: interrupted\n")
+        return EXIT_INTERNAL
+    except Exception as exc:  # unexpected: keep the contract anyway
+        sys.stderr.write("ERROR: internal failure: %s: %s\n" % (type(exc).__name__, exc))
+        return EXIT_INTERNAL
+
+    if output:
+        sys.stdout.write(output + "\n")
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main())

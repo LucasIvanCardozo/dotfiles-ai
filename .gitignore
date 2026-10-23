@@ -3,3 +3,6 @@
 
 # Runtime artifacts that older bootstrap.sh revisions wrote inside the repo.
 next-docs-installed.log
+
+# Per-skill virtualenv created by the math-calc wrapper (optional engine).
+skills/math-calc/.venv/
