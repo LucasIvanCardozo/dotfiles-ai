@@ -1,7 +1,7 @@
 ---
 name: math-calc
 description: Compute arithmetic, algebra, calculus, statistics and matrix math with a deterministic CLI instead of guessing. Use whenever a number must be calculated, verified, rounded, compared or reproduced - percentages, growth rates, unit-free numeric results, derivatives, integrals, equation solving, matrix determinants, descriptive statistics - or when a figure the user expects to be exact has to be produced or checked.
-compatibility: Linux/macOS with python3. Optional: sympy (exact/symbolic math) and bc (arbitrary precision arithmetic).
+compatibility: "Linux/macOS with python3. Optional: sympy (exact/symbolic math) and bc (arbitrary precision arithmetic)."
 ---
 
 # math-calc
