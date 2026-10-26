@@ -5,7 +5,6 @@ Versioned bundle of [Pi](https://pi.dev) (coding agent) config, skills, and boot
 ## Layout
 
 - `bootstrap.sh` — install everything in one shot: Pi skills + agent skills + the `agent-browser` CLI + bundled configs + baked web-design rules + Next.js docs snapshot. Prints only curated lines; `--verbose` streams every command's output. The agent-skill clones run in a bounded pool (`DOTFILES_JOBS`, default 6).
-- `agent/web-search.json` — `pi-web-access` ext config (workflow + provider defaults), copied to `~/.pi/agent/web-search.json` — the path `getWebSearchConfigDir()` falls back to when `XDG_CONFIG_HOME` is unset. Keep this file free of secrets.
 - `gentle-ai/profiles.json` — `gentle-pi` provider agent-model profiles (review/agent roles mapped to `model` + `thinking`), copied to `~/.pi/gentle-ai/profiles.json` on bootstrap. Ships `Full-Code` (active), `Chill-Code`, and `Boludear`; if the runtime file exists and differs, bootstrap asks before replacing it (Enter/`y` = replace, no terminal = keep + warning, `-y` = always replace) — the bundle stays the source of truth for the default profile. Every `provider/model` id referenced here must also exist in the machine's `~/.pi/agent/models.json` — see the note below. No secrets.
 - **Machine-local state, NOT managed by this bundle:** `~/.pi/agent/models.json` (custom model providers + API keys) and `~/.pi/agent/themes/` never ship here and bootstrap never touches them. A fresh machine sets up its own providers — with their keys — directly in `~/.pi/agent/models.json` (mode 600); `gentle-ai/profiles.json` roles only resolve if that file defines the referenced `provider/model` ids.
 - `skills/<id>/SKILL.md` — local skills shipped with the bundle (e.g. `kalarm-cli`, `epson-xp211-control`, `math-calc`, `genmsi-modeling`); copied to `~/.agents/skills/<id>/` on bootstrap.
@@ -49,7 +48,7 @@ After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the 
 
 ## Edit boundaries
 
-- **Safe to edit:** `bootstrap.sh`, `bake-web-design-rules.sh`, `generate-next-docs.sh`, `skills/*`, `agent/*`, `gentle-ai/*`, this file.
+- **Safe to edit:** `bootstrap.sh`, `bake-web-design-rules.sh`, `generate-next-docs.sh`, `skills/*`, `gentle-ai/*`, this file.
 - **Do not edit:** `.atl/skill-registry.md` (regenerate via Pi's `/skill-registry:refresh`), `~/.pi/agent/*`, `~/.pi/gentle-ai/*`, `~/.agents/skills/*` (installed copies; will be overwritten by `bootstrap.sh`).
 - **Generated runtime state:** `.atl/` is gitignored. Do not commit it; do not rely on it being present on another machine.
 
@@ -62,4 +61,4 @@ After `bootstrap.sh` finishes, restart Pi (or run `/reload`) so it picks up the 
 ## Adding a new Pi extension
 
 - **Extension** — append the npm or git URL to `PI_SKILLS` in `bootstrap.sh`. Pi's `pi install <url>` handles the rest.
-- **Config JSON** — drop the JSON file under `agent/` or `gentle-ai/` and re-run `./bootstrap.sh`. The script copies it into the matching `~/.pi/agent/` or `~/.pi/gentle-ai/` location. (Model providers and themes are machine-local — see the note in Layout.)
+- **Config JSON** — drop the JSON file under `gentle-ai/` and re-run `./bootstrap.sh`. The script copies it into the matching `~/.pi/gentle-ai/` location. (Model providers and themes are machine-local — see the note in Layout.)

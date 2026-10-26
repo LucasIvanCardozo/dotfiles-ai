@@ -409,19 +409,6 @@ fi
 # === Config files ===
 step "Config files"
 
-# pi-web-access (formerly pi-web-search) config. Copy from bundle so it's
-# versionable. Destination is the loader path the ext actually reads
-# (getWebSearchConfigDir() in utils.ts falls back to ~/.pi/agent/web-search.json
-# when XDG_CONFIG_HOME is unset). Keep this file free of secrets — anything
-# committed here ships in the repo.
-if [[ -f "$DOTFILES_DIR/agent/web-search.json" ]]; then
-  mkdir -p "$HOME/.pi/agent"
-  cp "$DOTFILES_DIR/agent/web-search.json" "$HOME/.pi/agent/web-search.json"
-  ok "web-search.json → ~/.pi/agent/"
-else
-  warn "agent/web-search.json missing from bundle — skip web-search config install"
-fi
-
 # gentle-pi provider profiles (model + thinking config for review/agent roles).
 # Copy from bundle so it's versionable, but a differing runtime copy carries
 # hand edits (most often the `active` profile) that a keystroke of habit must
