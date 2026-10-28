@@ -334,7 +334,7 @@ install_agents_skill_worker() {
 if ! command -v gentle-shell >/dev/null 2>&1; then
   warn "gentle-shell not found on PATH — skipping the package install"
   warn "  install it with: npm i -g gentle-pi   (or the bundled installer)"
-  warn "  MIGRATION.md has the full switch, from the Pi removal to this install"
+  warn "  MIGRATION.md has the full switch, from the uninstall to this install"
 elif [[ ! -f "$HOME/.gentle-shell/agent/settings.json" ]]; then
   warn "Gentle Shell home is not provisioned (~/.gentle-shell/agent) — skipping the package install"
   warn "  provision it once with: gentle-shell setup"
