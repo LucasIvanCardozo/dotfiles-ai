@@ -11,10 +11,11 @@ El orden importa:
 1. quitar Pi y su estado
 2. instalar Gentle Shell (como recomienda su propio repo)
 3. provisionar el home
-4. correr el bootstrap de este repo
-5. iniciar sesión y volver a registrar los servidores MCP
-6. borrar los directorios .pi/ de cada proyecto
-7. verificar
+4. entregar la memoria al core de Gentle Shell
+5. correr el bootstrap de este proyecto
+6. iniciar sesión y volver a registrar los servidores MCP
+7. borrar los directorios .pi/ de cada proyecto
+8. verificar
 ```
 
 No inviertas 1 y 2: el instalador empaquetado es autocontenido y no necesita
@@ -24,38 +25,38 @@ Pi, y una instalación limpia no tiene nada que importar.
 
 ## Leé esto antes del paso 1: Engram
 
-El store de memoria **no** vive bajo `~/.pi`:
+Tu memoria vive en `~/.engram/engram.db` y hoy la sirve el binario standalone
+`~/.local/bin/engram` (Engram **3.6.0**), que instalaste a mano. Gentle Shell
+trae su propio core de Engram (**3.5.2**), y como es **más viejo** que el
+schema de tu store, no puede abrirlo: se niega a levantar servidor sobre él
+(*"migrated by a newer Engram than Shell's bundled core"*).
 
-| Ruta | Qué es | ¿Se conserva? |
+La solución oficial es la migración del store, en el **paso 4**:
+
+```sh
+gentle-shell memory migrate --confirm-quiescent
+```
+
+Ese comando copia el directorio completo, migra **solo la copia**, la
+promociona y renombra el original como backup (`backup_dir`). El core
+empaquetado 3.5.2 implementa `migrate-copy`; una versión anterior fallaría
+sin tocar nada.
+
+**El orden es obligatorio: migrar y verificar PRIMERO, borrar el binario
+DESPUÉS.** Si borrás `~/.local/bin/engram` y la migración falla, te quedás
+sin memoria y sin forma de recuperarla sin reinstalar Engram a mano.
+
+Lo que se conserva y lo que se va:
+
+| Ruta | Qué es | Qué pasa |
 |---|---|---|
-| `~/.engram/engram.db` | el store de memoria (25 MB + WAL) | **sí** |
-| `~/.local/bin/engram` | tu binario de Engram 3.6.0 | **sí** |
-| `~/.agents/skills/` | los skills de agente | **sí** |
-| `~/.gentle-ai/`, `~/.local/bin/gentle-ai` | el CLI de Gentle AI y su estado | **sí** |
+| `~/.engram/engram.db` | el store de memoria | **se conserva** (migrado en el paso 4) |
+| `~/.local/bin/engram` | tu Engram 3.6.0 standalone | **se borra** en el paso 4, tras verificar |
+| `~/.engram/*.bak-2026*` | backups viejos de septiembre | se borran (basura) |
+| `~/.agents/skills/` | los skills de agente | **se conservan** |
+| `~/.gentle-ai/`, `~/.local/bin/gentle-ai` | el CLI de Gentle AI y su estado | **se conservan** |
 
-El paso 1 no toca nada de eso. Pero hay un detalle de versiones que conviene
-conocer:
-
-- tu Engram es **3.6.0**; el core de Engram que empaqueta Gentle Shell es más
-  viejo (**3.5.2** en el layout actual);
-- cuando el store fue migrado por un Engram más nuevo que el core del shell,
-  el shell se niega a levantar un servidor sobre él y avisa: *"Engram memory
-  disabled: `~/.engram` was migrated by a newer Engram than Shell's bundled
-  core"*;
-- la salida es levantar tu propio servidor y dejar que el shell lo reutilice:
-
-  ```sh
-  engram serve &
-  ```
-
-  El shell verifica el endpoint `/compatibility` del servidor antes de usarlo
-  (Engram ≥ 3.4.0 lo responde, así que 3.6.0 sirve). La alternativa del
-  bundle es `gentle-shell memory migrate --confirm-quiescent`, que exige que
-  ningún cliente de Engram esté corriendo.
-
-**No borres `~/.local/bin/engram`.** `purge-pi-opencode-gentle.sh` lo borra
-(junto con `~/.agents`, que es donde viven tus skills): eso es un bug de ese
-script, no parte de esta migración.
+Los pasos 1 a 3 no tocan nada de eso.
 
 ---
 
@@ -66,7 +67,7 @@ script, no parte de esta migración.
 pnpm remove -g @earendil-works/pi-coding-agent
 
 # 2. (opcional) guardar las credenciales de la cuenta de Google para no
-#    volver a iniciar sesión en el paso 5. Omití esta línea si preferís
+#    volver a iniciar sesión en el paso 6. Omití esta línea si preferís
 #    autenticarte desde cero.
 mkdir -p ~/.gentle-shell-migration
 [ -f ~/.pi/agent/antigravity-accounts.json ] && \
@@ -138,7 +139,60 @@ resultado de la instalación de Gentle AI.
 > auto-provisionado cuando el comando es un subcomando de Pi (tiene que dejar
 > `argv[0]` intacto para que Pi pueda despachar `install`).
 
-## Paso 4 — Instalar el bundle de este proyecto
+## Paso 4 — Entregar la memoria al core de Gentle Shell
+
+A partir de acá queda **un solo Engram**: el del shell.
+
+```sh
+# 1. parar el servidor de Engram actual: está escribiendo el store
+pkill -f "engram serve"
+sleep 1
+pgrep -af engram          # no debería quedar ningún servidor
+
+# 2. migrar el store al core empaquetado (copia, migra solo la copia,
+#    la promociona y renombra el original como backup)
+gentle-shell memory migrate --confirm-quiescent
+```
+
+*Resultado esperado:* un JSON con `status: "migrated"`, `instance_id` y
+`backup_dir`. **Anotá el `backup_dir`.**
+
+> La confirmación (`--confirm-quiescent`) es una aserción tuya, no un lock:
+> el store tiene que estar quieto de verdad. Nunca corras esto con otro
+> cliente de Engram usando el store.
+
+### Verificar antes de borrar nada
+
+```sh
+gentle-shell
+```
+
+Dentro de la sesión: confirmá que las tools de memoria están registradas
+(`mem_search`, `mem_save`) y que un `mem_search` devuelve tus registros. Recién
+después seguí.
+
+### Recién ahora, limpiar los rastros del Engram viejo
+
+```sh
+# 1. el binario standalone 3.6.0 (22 MB)
+rm ~/.local/bin/engram
+
+# 2. los backups viejos de septiembre dentro del store
+rm -f ~/.engram/engram.db.bak-* ~/.engram/engram.db-shm.bak-* ~/.engram/engram.db-wal.bak-*
+
+# 3. el backup previo a la migración, una vez que confirmaste que tus
+#    registros están bien (usá el backup_dir que te imprimió la migración)
+rm -rf <backup_dir>
+```
+
+*Resultado esperado:* `command -v engram` no encuentra nada y
+`~/.gentle-shell/runtime/` tiene el core del shell.
+
+> No definas `ENGRAM_BIN`, `ENGRAM_URL` ni `ENGRAM_DATA_DIR` a mano: una
+> selección explícita de esas variables **desactiva** la memoria empaquetada
+> (el shell no sondea ni arranca nada en ese caso).
+
+## Paso 5 — Instalar el bundle de este proyecto
 
 ```sh
 cd ~/Documentos/Workspace/dotfiles-ai
@@ -158,7 +212,7 @@ Qué instala, todo dentro del home nuevo:
 *Resultado esperado:* un `✓` por cada ítem y después `✓ Done. Open
 gentle-shell to use it.`
 
-## Paso 5 — Iniciar sesión y volver a registrar los servidores MCP
+## Paso 6 — Iniciar sesión y volver a registrar los servidores MCP
 
 Una instalación limpia no tiene credenciales ni configuración MCP: ambos
 vivían bajo `~/.pi/agent/`.
@@ -205,7 +259,7 @@ JSON
 *Resultado esperado:* la próxima sesión lista los dos servidores; en
 `gentle-shell`, el panel de MCP los muestra conectados.
 
-## Paso 6 — Borrar los directorios `.pi/` de cada proyecto
+## Paso 7 — Borrar los directorios `.pi/` de cada proyecto
 
 Un `.pi/` de proyecto es la **configuración de proyecto** de Pi (overrides de
 modelo/agente por proyecto, servidores MCP, skills, extensiones, persona). Pi
@@ -247,7 +301,7 @@ cd "$HOME/Documentos/Facultad/Fundamento de Lenguajes Formales" && git rm -r .pi
 > y `rol-data` una extensión de proyecto. Si querés conservar alguno, no
 > corras su comando.
 
-## Paso 7 — Verificar
+## Paso 8 — Verificar
 
 ```sh
 # el runtime y su home
@@ -261,7 +315,11 @@ ls ~/.gentle-shell/config/gentle-ai/profiles.json 2>/dev/null || ls ~/.gentle-sh
 command -v pi || echo "pi: no está"
 ls ~/.pi 2>/dev/null || echo "~/.pi: no está"
 
-# el store de memoria sobrevivió
+# Engram: un solo core, el del shell
+command -v engram || echo "engram global: no está (va bien)"
+ls ~/.gentle-shell/runtime/ | grep -i engram
+
+# el store de memoria sobrevivió y lo sirve el shell
 ls -la ~/.engram/engram.db
 
 # el switch de review sigue apagado a nivel de clon
@@ -283,7 +341,7 @@ modelos de los agentes coincide con el perfil que tenías.
 
 ## Rollback
 
-Los pasos 1 y 6 son los únicos destructivos, y son justamente el objetivo de
+Los pasos 1, 4 y 7 son los que borran algo, y son justamente el objetivo de
 una instalación limpia. Si la instalación nueva se porta mal, Pi está a un
 comando de distancia:
 
@@ -291,7 +349,9 @@ comando de distancia:
 pnpm add -g @earendil-works/pi-coding-agent
 ```
 
-El store de Engram, los skills y el estado de Gentle AI nunca se tocaron.
+Para la memoria, el backup previo a la migración (el `backup_dir` del paso 4)
+sigue ahí hasta que lo borres a propósito: si algo salió mal, se puede
+restaurar.
 
 ## Troubleshooting
 
@@ -300,11 +360,15 @@ El store de Engram, los skills y el estado de Gentle AI nunca se tocaron.
   estar en el PATH.
 - **`gentle-shell install` no hace nada** — el home nunca fue provisionado:
   corré `gentle-shell setup`.
+- **`memory migrate` falla o no hace nada** — no borres el binario viejo: el
+  store original queda intacto. Volvé a correrlo con ningún cliente de
+  Engram usando el store, o dejá `engram serve` como está y el shell lo
+  reutiliza (la memoria funciona igual, solo queda el binario extra).
+- **La memoria dice "disabled" en cada arranque** — no definas `ENGRAM_BIN`,
+  `ENGRAM_URL` ni `ENGRAM_DATA_DIR` a mano: una selección explícita desactiva
+  la memoria empaquetada.
 - **El agente usa el modelo equivocado** — `gentle-ai/profiles.json` no
-  aterrizó en el config home; volvé a correr el paso 4.
-- **Faltan las tools de memoria** — mirá la nota de Engram al principio de
-  este archivo: el store está bien, lo que falla es el servidor.
+  aterrizó en el config home; volvé a correr el paso 5.
 - **`purge-pi-opencode-gentle.sh` borra `~/.agents` y
-  `~/.local/bin/engram`** — eliminaría todos los skills de agente y la
-  capacidad de servir un store de Engram con schema más nuevo. Sacá esas
-  rutas del script antes de correrlo.
+  `~/.local/bin/engram`** — ese script no es parte de esta migración y
+  eliminaría todos los skills de agente. No lo corras.
