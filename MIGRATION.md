@@ -1,183 +1,188 @@
-# Migration: Pi → Gentle Shell (clean install)
+# Migración: Pi → Gentle Shell (instalación limpia)
 
-The target state: **Pi is gone**, Gentle Shell is the only agent runtime, and
-this repo's bundle is installed on top of it. Everything from the old Pi
-installation is discarded — chat history included — because the memory that
-matters already lives in Engram.
+El estado objetivo: **Pi desaparece**, Gentle Shell queda como único runtime del
+agente y el bundle de este repo se instala encima. Todo lo de la instalación
+anterior de Pi se descarta — el historial de chats incluido — porque la
+memoria que importa ya vive en Engram.
 
-The order matters:
+El orden importa:
 
 ```
-1. remove Pi and its state
-2. install Gentle Shell (the way its repository recommends)
-3. provision the home
-4. run this repo's bootstrap
-5. sign in and re-register the MCP servers
-6. remove the project-level .pi/ directories
-7. verify
+1. quitar Pi y su estado
+2. instalar Gentle Shell (como recomienda su propio repo)
+3. provisionar el home
+4. correr el bootstrap de este repo
+5. iniciar sesión y volver a registrar los servidores MCP
+6. borrar los directorios .pi/ de cada proyecto
+7. verificar
 ```
 
-Do not reorder 1 and 2: the bundled installer is self-contained and does not
-need Pi, and a clean install has nothing left to import.
+No inviertas 1 y 2: el instalador empaquetado es autocontenido y no necesita
+Pi, y una instalación limpia no tiene nada que importar.
 
 ---
 
-## Read this before step 1: Engram
+## Leé esto antes del paso 1: Engram
 
-The memory store does **not** live under `~/.pi`:
+El store de memoria **no** vive bajo `~/.pi`:
 
-| Path | What it is | Kept? |
+| Ruta | Qué es | ¿Se conserva? |
 |---|---|---|
-| `~/.engram/engram.db` | the memory store (25 MB + WAL) | **keep** |
-| `~/.local/bin/engram` | your Engram 3.6.0 binary | **keep** |
-| `~/.agents/skills/` | the agent skills | **keep** |
-| `~/.gentle-ai/`, `~/.local/bin/gentle-ai` | the Gentle AI CLI and its state | **keep** |
+| `~/.engram/engram.db` | el store de memoria (25 MB + WAL) | **sí** |
+| `~/.local/bin/engram` | tu binario de Engram 3.6.0 | **sí** |
+| `~/.agents/skills/` | los skills de agente | **sí** |
+| `~/.gentle-ai/`, `~/.local/bin/gentle-ai` | el CLI de Gentle AI y su estado | **sí** |
 
-Step 1 never touches those. But there is one version detail to know:
+El paso 1 no toca nada de eso. Pero hay un detalle de versiones que conviene
+conocer:
 
-- your Engram is **3.6.0**; the Engram core bundled with Gentle Shell is
-  older (**3.5.2** in the current layout);
-- when the store was migrated by a newer Engram than Shell's bundled core,
-  Shell refuses to start a server on it and reports *"Engram memory disabled:
-  `~/.engram` was migrated by a newer Engram than Shell's bundled core"*;
-- the fix is to run your own server and let Shell reuse it:
+- tu Engram es **3.6.0**; el core de Engram que empaqueta Gentle Shell es más
+  viejo (**3.5.2** en el layout actual);
+- cuando el store fue migrado por un Engram más nuevo que el core del shell,
+  el shell se niega a levantar un servidor sobre él y avisa: *"Engram memory
+  disabled: `~/.engram` was migrated by a newer Engram than Shell's bundled
+  core"*;
+- la salida es levantar tu propio servidor y dejar que el shell lo reutilice:
 
   ```sh
   engram serve &
   ```
 
-  Shell verifies the running server's `/compatibility` endpoint before using
-  it (Engram ≥ 3.4.0 answers it, so 3.6.0 is fine). The bundled alternative is
-  `gentle-shell memory migrate --confirm-quiescent`, which requires that no
-  Engram client is running.
+  El shell verifica el endpoint `/compatibility` del servidor antes de usarlo
+  (Engram ≥ 3.4.0 lo responde, así que 3.6.0 sirve). La alternativa del
+  bundle es `gentle-shell memory migrate --confirm-quiescent`, que exige que
+  ningún cliente de Engram esté corriendo.
 
-**Do not delete `~/.local/bin/engram`.** `purge-pi-opencode-gentle.sh` deletes
-it — that is a bug in that script, not part of this migration.
+**No borres `~/.local/bin/engram`.** `purge-pi-opencode-gentle.sh` lo borra
+(junto con `~/.agents`, que es donde viven tus skills): eso es un bug de ese
+script, no parte de esta migración.
 
 ---
 
-## Step 1 — Remove Pi and its state
+## Paso 1 — Quitar Pi y su estado
 
 ```sh
-# 1. the global Pi package
+# 1. el paquete global de Pi
 pnpm remove -g @earendil-works/pi-coding-agent
 
-# 2. (optional) keep the Google account credentials so you do not sign in
-#    again in step 5. Skip this line to sign in from scratch.
+# 2. (opcional) guardar las credenciales de la cuenta de Google para no
+#    volver a iniciar sesión en el paso 5. Omití esta línea si preferís
+#    autenticarte desde cero.
 mkdir -p ~/.gentle-shell-migration
 [ -f ~/.pi/agent/antigravity-accounts.json ] && \
   install -m 600 ~/.pi/agent/antigravity-accounts.json \
     ~/.gentle-shell-migration/antigravity-accounts.json
 
-# 3. Pi's home: settings, installed packages, extensions, sessions, the old
-#    config home. This is the whole install.
+# 3. el home de Pi: settings, paquetes instalados, extensiones, sesiones y el
+#    config home viejo. Esto es toda la instalación.
 rm -rf ~/.pi
 
-# 4. anything else Pi left behind
-rm -rf ~/.local/share/pi            # only if it exists
+# 4. cualquier otra cosa que haya dejado Pi
+rm -rf ~/.local/share/pi            # solo si existe
 rm -rf ~/.config/pi-hashline-edit-pro
 
-# 5. drop the stale command from the shell's hash
+# 5. sacar el comando viejo de la caché del shell
 hash -r
 ```
 
-*Expected:* `command -v pi` prints nothing, and `ls ~/.pi` fails.
+*Resultado esperado:* `command -v pi` no imprime nada y `ls ~/.pi` falla.
 
-> Sessions (the chat history) go with `~/.pi`. The memory does not — that is
-> Engram's store in `~/.engram`.
+> Las sesiones (el historial de chats) se van con `~/.pi`. La memoria no:
+> ese es el store de Engram en `~/.engram`.
 
-## Step 2 — Install Gentle Shell
+## Paso 2 — Instalar Gentle Shell
 
-Its repository recommends the release installer: it downloads a verified
-bundle, checks the checksum and opens a browser wizard that installs the
-self-contained product (its own Node, npm, pnpm and Pi under
-`~/.gentle-shell/`, without touching your own toolchain).
+Su repo recomienda el instalador del release: descarga un bundle verificado,
+chequea el checksum y abre un wizard en el navegador que instala el producto
+autocontenido (su propio Node, npm, pnpm y Pi dentro de `~/.gentle-shell/`,
+sin tocar tu propio toolchain).
 
 ```sh
 cd /tmp
 
-# 1. the release bundle and its checksum file
+# 1. el bundle del release y su archivo de checksum
 curl -fLO https://github.com/Gentleman-Programming/gentle-shell/releases/latest/download/gentle-shell-installer-linux.tar.gz
 curl -fLO https://github.com/Gentleman-Programming/gentle-shell/releases/latest/download/gentle-shell-installers-SHA256SUMS.txt
 
-# 2. verify before running
+# 2. verificar antes de ejecutar
 sha256sum -c --ignore-missing gentle-shell-installers-SHA256SUMS.txt
 
-# 3. unpack and install (opens the wizard in your browser)
+# 3. descomprimir e instalar (abre el wizard en el navegador)
 tar -xzf gentle-shell-installer-linux.tar.gz
 sh gentle-shell-installer/install-gentle-shell.sh
 ```
 
-*Expected:* `gentle-shell-installer-linux.tar.gz: OK`, then the wizard at
-`http://127.0.0.1:<port>`. Finish it there; it installs the bundled product
-and puts `~/.gentle-shell/bin/gentle-shell` on your PATH.
+*Resultado esperado:* `gentle-shell-installer-linux.tar.gz: OK` y después el
+wizard en `http://127.0.0.1:<puerto>`. Terminalo ahí: instala el producto
+empaquetado y agrega `~/.gentle-shell/bin/gentle-shell` a tu PATH.
 
-## Step 3 — Provision the home
+## Paso 3 — Provisionar el home
 
 ```sh
-# the launcher is on PATH now; open a new shell if this one is stale
+# el launcher ya está en el PATH; abrí una terminal nueva si esta está vieja
 export PATH="$HOME/.gentle-shell/bin:$PATH"
 
-# what is running and which home it uses
+# qué está corriendo y qué home usa
 gentle-shell --version
 
-# provision the home: runs `gentle-ai install --agent pi --scope global`
-# against the isolated home, which installs gentle-pi, gentle-engram,
-# pi-web-access and pi-btw
+# provisionar el home: corre `gentle-ai install --agent pi --scope global`
+# contra el home aislado, que instala gentle-pi, gentle-engram,
+# pi-web-access y pi-btw
 gentle-shell setup
 ```
 
-*Expected:* `home isolated ~/.gentle-shell/agent`, and the Gentle AI install
-result at the end.
+*Resultado esperado:* `home isolated ~/.gentle-shell/agent` y al final el
+resultado de la instalación de Gentle AI.
 
-> `setup` is mandatory before installing packages: the launcher skips its
-> automatic provisioning for Pi subcommands (it has to leave `argv[0]` alone so
-> Pi can dispatch `install`).
+> `setup` es obligatorio antes de instalar paquetes: el launcher saltea su
+> auto-provisionado cuando el comando es un subcomando de Pi (tiene que dejar
+> `argv[0]` intacto para que Pi pueda despachar `install`).
 
-## Step 4 — Install this project's bundle
+## Paso 4 — Instalar el bundle de este proyecto
 
 ```sh
 cd ~/Documentos/Workspace/dotfiles-ai
 ./bootstrap.sh
 ```
 
-What it installs, all inside the new home:
+Qué instala, todo dentro del home nuevo:
 
-| What | Where |
+| Qué | Dónde |
 |---|---|
-| `pi-antigravity` (your provider), `diagram-design`, `pi-codegraph-enhanced` | `~/.gentle-shell/agent/npm/` |
-| the 21 upstream agent skills + the 5 local ones | `~/.agents/skills/` |
-| the `agent-browser` CLI | your global npm |
-| `gentle-ai/profiles.json` (Full-Code / Chill-Code / Boludear) | the Gentle Shell config home |
-| the baked web-design rules, the Next.js docs snapshot | `~/.agents/skills/` |
+| `pi-antigravity` (tu provider), `diagram-design`, `pi-codegraph-enhanced` | `~/.gentle-shell/agent/npm/` |
+| los 21 skills de agente de upstream + los 5 locales | `~/.agents/skills/` |
+| el CLI `agent-browser` | tu npm global |
+| `gentle-ai/profiles.json` (Full-Code / Chill-Code / Boludear) | el config home de Gentle Shell |
+| las reglas de web-design horneadas y el snapshot de docs de Next.js | `~/.agents/skills/` |
 
-*Expected:* one `✓` per item, then `✓ Done. Open gentle-shell to use it.`
+*Resultado esperado:* un `✓` por cada ítem y después `✓ Done. Open
+gentle-shell to use it.`
 
-## Step 5 — Sign in and re-register the MCP servers
+## Paso 5 — Iniciar sesión y volver a registrar los servidores MCP
 
-A clean install has no credentials and no MCP configuration: both lived in
-`~/.pi/agent/`.
+Una instalación limpia no tiene credenciales ni configuración MCP: ambos
+vivían bajo `~/.pi/agent/`.
 
-### Sign in
+### Iniciar sesión
 
-Either sign in from scratch:
+O te autenticás desde cero:
 
 ```sh
 gentle-shell
-# inside the session: /login  → pick the Antigravity provider and sign in
+# dentro de la sesión: /login  → elegí el provider Antigravity e iniciá sesión
 ```
 
-or reuse the account saved in step 1:
+O reutilizás la cuenta guardada en el paso 1:
 
 ```sh
 install -m 600 ~/.gentle-shell-migration/antigravity-accounts.json \
   ~/.gentle-shell/agent/antigravity-accounts.json
 ```
 
-### MCP servers
+### Servidores MCP
 
-Pi reads `<agent home>/mcp.json`; there is no `pi mcp add` command, so write
-the file:
+Pi lee `<agent home>/mcp.json`; no existe un comando `pi mcp add`, así que se
+escribe el archivo:
 
 ```sh
 cat > ~/.gentle-shell/agent/mcp.json <<'JSON'
@@ -197,37 +202,37 @@ cat > ~/.gentle-shell/agent/mcp.json <<'JSON'
 JSON
 ```
 
-*Expected:* the next session lists both servers; `gentle-shell` → the MCP
-panel shows them connected.
+*Resultado esperado:* la próxima sesión lista los dos servidores; en
+`gentle-shell`, el panel de MCP los muestra conectados.
 
-## Step 6 — Remove the project-level `.pi/` directories
+## Paso 6 — Borrar los directorios `.pi/` de cada proyecto
 
-A project `.pi/` is Pi's **project** configuration (per-project agent/model
-overrides, MCP servers, skills, extensions, persona). Pi reads it from the
-working directory, so it still works under Gentle Shell — removing it is a
-deliberate cleanup, not a repair.
+Un `.pi/` de proyecto es la **configuración de proyecto** de Pi (overrides de
+modelo/agente por proyecto, servidores MCP, skills, extensiones, persona). Pi
+la lee desde el directorio de trabajo, así que sigue funcionando bajo Gentle
+Shell: borrarla es una limpieza deliberada, no una reparación.
 
 ```sh
-# see them first
+# verlos primero
 find ~/Documentos -maxdepth 6 -type d -name ".pi" -not -path "*/node_modules/*"
 ```
 
-Delete the ones git does not track:
+Borrá los que git no trackea:
 
 ```sh
 find ~/Documentos -maxdepth 6 -type d -name ".pi" -not -path "*/node_modules/*" -print0 |
 while IFS= read -r -d $'\0' d; do
   repo="${d%/.pi}"
   if git -C "$repo" ls-files --error-unmatch .pi >/dev/null 2>&1; then
-    printf 'tracked — remove it in that repository: %s\n' "$d"
+    printf 'trackeado — borralo en ese repo: %s\n' "$d"
   else
     rm -rf "$d"
-    printf 'removed: %s\n' "$d"
+    printf 'borrado: %s\n' "$d"
   fi
 done
 ```
 
-The tracked ones need a commit in their own repository — one command each:
+Los trackeados necesitan un commit en su propio repo — un comando cada uno:
 
 ```sh
 cd ~/Documentos/Workspace/NextJs/JulsGYM           && git rm -r .pi && git commit -m "chore: drop pi project config"
@@ -237,67 +242,69 @@ cd ~/Documentos/Workspace/Facultad/TP-especial-SO  && git rm -r .pi && git commi
 cd "$HOME/Documentos/Facultad/Fundamento de Lenguajes Formales" && git rm -r .pi && git commit -m "chore: drop pi project config"
 ```
 
-> Read each one before removing it: `dotfile` and `TP-especial-SO` hold your
-> MiniMax M2.7 per-agent overrides, `JulsGYM` a project MCP server and
-> `rol-data` a project extension. If you want to keep one, do not run its
-> command.
+> Leé cada uno antes de borrarlo: `dotfile` y `TP-especial-SO` tienen tus
+> overrides de MiniMax M2.7 por agente, `JulsGYM` un servidor MCP de proyecto
+> y `rol-data` una extensión de proyecto. Si querés conservar alguno, no
+> corras su comando.
 
-## Step 7 — Verify
+## Paso 7 — Verificar
 
 ```sh
-# the runtime and its home
+# el runtime y su home
 gentle-shell --version
 
-# the home has the packages and the config home has the profiles
+# el home tiene los paquetes y el config home tiene los perfiles
 ls ~/.gentle-shell/agent/settings.json
 ls ~/.gentle-shell/config/gentle-ai/profiles.json 2>/dev/null || ls ~/.gentle-shell/gentle-ai/profiles.json
 
-# Pi is really gone
-command -v pi || echo "pi: gone"
-ls ~/.pi 2>/dev/null || echo "~/.pi: gone"
+# Pi realmente no está
+command -v pi || echo "pi: no está"
+ls ~/.pi 2>/dev/null || echo "~/.pi: no está"
 
-# the memory store survived
+# el store de memoria sobrevivió
 ls -la ~/.engram/engram.db
 
-# the review switch is still clone-local off
+# el switch de review sigue apagado a nivel de clon
 gentle-ai review mode status
 ```
 
-Then start a session and check it end to end:
+Después arrancá una sesión y probala de punta a punta:
 
 ```sh
 cd ~/Documentos/Workspace/dotfiles-ai
 gentle-shell
 ```
 
-Inside the session: the skills load (`/skill-registry:refresh` lists them), the
-memory tools answer, the web tools answer, and the agent model routing matches
-the profile you had.
+Dentro de la sesión: los skills cargan (`/skill-registry:refresh` los lista),
+las tools de memoria responden, las tools de web responden y el routing de
+modelos de los agentes coincide con el perfil que tenías.
 
 ---
 
 ## Rollback
 
-Steps 1 and 6 are the only destructive ones, and they are the point of a clean
-install. If the new install misbehaves, Pi is one command away again:
+Los pasos 1 y 6 son los únicos destructivos, y son justamente el objetivo de
+una instalación limpia. Si la instalación nueva se porta mal, Pi está a un
+comando de distancia:
 
 ```sh
 pnpm add -g @earendil-works/pi-coding-agent
 ```
 
-The Engram store, the skills and the Gentle AI state were never touched.
+El store de Engram, los skills y el estado de Gentle AI nunca se tocaron.
 
 ## Troubleshooting
 
-- **`gentle-shell: No pi runtime could be found`** — a bundled install ships
-  its own Pi; if you installed the standalone one, Pi must be on PATH.
-- **`gentle-shell install` does nothing** — the home was never provisioned:
-  run `gentle-shell setup`.
-- **The agent uses the wrong model** — `gentle-ai/profiles.json` did not land
-  in the config home; re-run step 4.
-- **Memory tools missing** — check the Engram note at the top of this file;
-  the store is fine, the server is the issue.
-- **`purge-pi-opencode-gentle.sh` deletes `~/.agents` and
-  `~/.local/bin/engram`** — it would remove every agent skill and the ability
-  to serve a newer-schema Engram store. Remove those paths from the script
-  before running it.
+- **`gentle-shell: No pi runtime could be found`** — una instalación
+  empaquetada trae su propio Pi; si instalaste la standalone, Pi tiene que
+  estar en el PATH.
+- **`gentle-shell install` no hace nada** — el home nunca fue provisionado:
+  corré `gentle-shell setup`.
+- **El agente usa el modelo equivocado** — `gentle-ai/profiles.json` no
+  aterrizó en el config home; volvé a correr el paso 4.
+- **Faltan las tools de memoria** — mirá la nota de Engram al principio de
+  este archivo: el store está bien, lo que falla es el servidor.
+- **`purge-pi-opencode-gentle.sh` borra `~/.agents` y
+  `~/.local/bin/engram`** — eliminaría todos los skills de agente y la
+  capacidad de servir un store de Engram con schema más nuevo. Sacá esas
+  rutas del script antes de correrlo.
