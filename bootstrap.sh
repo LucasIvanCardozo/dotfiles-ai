@@ -9,9 +9,12 @@
 #   AGENTS_SKILLS          subfolder skills installed to ~/.agents/skills/<id>
 #                          (use a | between repo URL and the subpath inside the
 #                           repo, and another | + branch to pin the git ref)
+#   MCP servers            declared in install-mcp-servers.sh and installed
+#                          with Pi's own `mcp add` into the home's mcp.json
 #
 # Companion: ./generate-next-docs.sh  — snapshot Next.js docs into a global skill
 # Companion: ./bake-web-design-rules.sh — bundle web-design-guidelines rules offline
+# Companion: ./install-mcp-servers.sh — install the declared MCP servers
 #
 # Usage:  chmod +x bootstrap.sh   # first time only
 #         ./bootstrap.sh            # quiet: only curated lines
@@ -341,6 +344,23 @@ else
     [[ "$url" =~ ^# ]] && continue
     install_shell_package "$url"
   done
+fi
+
+# === MCP servers ===
+#
+# The servers this bundle declares live in install-mcp-servers.sh; the script
+# writes them with Pi's own `mcp add` command, so the runtime file keeps the
+# schema Pi validates. It prints its own curated lines (one ✓ per server), so
+# it is called directly instead of through run_quiet.
+#
+# MCP is optional: a missing per-machine prerequisite is a warning, not a
+# failed bootstrap.
+step "MCP servers"
+if [[ ! -f "$HOME/.gentle-shell/agent/settings.json" ]]; then
+  warn "Gentle Shell home is not provisioned (~/.gentle-shell/agent) — skipping the MCP servers"
+  warn "  provision it once with: gentle-shell setup"
+elif ! "$DOTFILES_DIR/install-mcp-servers.sh"; then
+  warn "some MCP servers were not installed — see the output above"
 fi
 
 # === Agent skills ===
