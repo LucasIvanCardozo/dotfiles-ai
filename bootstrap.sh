@@ -4,10 +4,11 @@
 # Edit the two arrays below to add/remove skills. Re-run the script
 # anytime to update everything to upstream HEAD.
 #
-#   PI_SKILLS       full-repo skills installed via `pi install`
-#   AGENTS_SKILLS   subfolder skills installed to ~/.agents/skills/<id>
-#                   (use a | between repo URL and the subpath inside the repo,
-#                    and another | + branch to pin the git ref)
+#   GENTLE_SHELL_PACKAGES  agent packages installed via `gentle-shell install`
+#                          (they land in Gentle Shell's own home, not in ~/.pi)
+#   AGENTS_SKILLS          subfolder skills installed to ~/.agents/skills/<id>
+#                          (use a | between repo URL and the subpath inside the
+#                           repo, and another | + branch to pin the git ref)
 #
 # Companion: ./generate-next-docs.sh  — snapshot Next.js docs into a global skill
 # Companion: ./bake-web-design-rules.sh — bundle web-design-guidelines rules offline
@@ -30,11 +31,11 @@
 #
 # Output policy: by default only intentional lines are printed (section
 # headers, one ✓ per installed item, warnings). Everything a third-party
-# command prints (git clone progress, `pi install` chatter, helper-script
-# step logs) is captured by run_quiet() and discarded on success. On failure
-# the captured output is dumped, a persistent log is written under
-# $XDG_STATE_HOME/dotfiles-ai/, and the script aborts. Use --verbose to
-# bypass capture entirely when debugging.
+# command prints (git clone progress, `gentle-shell install` chatter,
+# helper-script step logs) is captured by run_quiet() and discarded on
+# success. On failure the captured output is dumped, a persistent log is
+# written under $XDG_STATE_HOME/dotfiles-ai/, and the script aborts. Use
+# --verbose to bypass capture entirely when debugging.
 
 set -euo pipefail
 
@@ -169,9 +170,18 @@ _dump_failure() {
   } >&2
 }
 
-PI_SKILLS=(
+# Agent packages, installed with `gentle-shell install` so they land inside
+# Gentle Shell's own home (~/.gentle-shell/agent) instead of a plain pi home.
+#
+# Only the packages this project adds on top of the Gentle AI stack. Gentle AI
+# already installs gentle-pi, gentle-engram, pi-web-access and pi-btw for Pi
+# (its `install --agent pi` runs `pi install npm:<pkg>` for each of them), and
+# `gentle-shell setup` runs exactly that against the isolated home. Installing
+# them again here would only duplicate work.
+GENTLE_SHELL_PACKAGES=(
   "https://github.com/cathrynlavery/diagram-design"
   "npm:@estebanforge/pi-codegraph-enhanced"  # CodeGraph native ext, fork of @vndv/pi-codegraph with startup auto-index (needs `@colbymchenry/codegraph` CLI on PATH)
+  "npm:pi-antigravity"      # the Antigravity (Google account) provider — the sign-in this machine uses
 )
 
 # Next.js docs snapshot — generates the nextjs-docs-v<version> skill at the end.
@@ -242,7 +252,7 @@ AGENTS_SKILLS=(
 # Pre-count entries for the section banners. AGENTS_SKILLS entries are
 # "<repo>|<subpath>|<ref>[|<id>]" — count the array directly; pure-`#` lines
 # inside the array definition are bash comments and not elements.
-PI_COUNT=${#PI_SKILLS[@]}
+PACKAGE_COUNT=${#GENTLE_SHELL_PACKAGES[@]}
 AGENTS_COUNT=${#AGENTS_SKILLS[@]}
 local_count=0
 for _ in "$DOTFILES_DIR"/skills/*/; do
@@ -250,13 +260,30 @@ for _ in "$DOTFILES_DIR"/skills/*/; do
   local_count=$((local_count + 1))
 done
 
-install_pi() {
+install_shell_package() {
   local url="$1"
   # Derive a short name from the URL or npm spec for cleaner output. Works
   # for both https://host/path/<name> and npm:@scope/<name> forms.
   local name="${url##*/}"
-  run_quiet "pi install $name" pi install "$url"
+  run_quiet "gentle-shell install $name" gentle-shell install "$url"
   ok "$name"
+}
+
+# resolve_config_home — where Gentle Shell keeps its own settings (profiles,
+# the global model routing, the persona, the banner, the vim preference, the
+# background-subagents policy). The rule is the one Gentle Shell applies
+# itself, so the bundle writes to the same place the runtime reads:
+#   1. a bundled install   -> <prefix>/config/gentle-ai
+#   2. GENTLE_PI_CONFIG_HOME, when set
+#   3. the isolated home   -> ~/.gentle-shell/gentle-ai
+resolve_config_home() {
+  if [[ -n "${GENTLE_PI_CONFIG_HOME:-}" ]]; then
+    printf '%s\n' "$GENTLE_PI_CONFIG_HOME"
+  elif [[ -d "$HOME/.gentle-shell/config/gentle-ai" ]]; then
+    printf '%s\n' "$HOME/.gentle-shell/config/gentle-ai"
+  else
+    printf '%s\n' "$HOME/.gentle-shell/gentle-ai"
+  fi
 }
 
 install_agents_skill_worker() {
@@ -289,20 +316,41 @@ install_agents_skill_worker() {
   rm -rf "$tmp"
 }
 
-# === Pi extensions ===
-step "Pi extensions (${PI_COUNT})"
-for url in "${PI_SKILLS[@]}"; do
-  [[ "$url" =~ ^# ]] && continue
-  install_pi "$url"
-done
+# === Gentle Shell packages ===
+#
+# `gentle-shell install` is the only entry point: the launcher forwards it to
+# Pi's own package manager with Gentle Shell's home selected, so every package
+# lands in ~/.gentle-shell/agent and the plain ~/.pi/agent home stays
+# untouched.
+#
+# The launcher skips its automatic provisioning for Pi subcommands (it has to
+# leave argv[0] alone so pi can dispatch the command), so a home that was
+# never provisioned has to be provisioned by hand with `gentle-shell setup`.
+# Installing into an unprovisioned home is refused here instead of failing
+# halfway through the run.
+if ! command -v gentle-shell >/dev/null 2>&1; then
+  warn "gentle-shell not found on PATH — skipping the package install"
+  warn "  install it with: npm i -g gentle-pi   (or the bundled installer)"
+  warn "  MIGRATION.md has the full switch, from the Pi removal to this install"
+elif [[ ! -f "$HOME/.gentle-shell/agent/settings.json" ]]; then
+  warn "Gentle Shell home is not provisioned (~/.gentle-shell/agent) — skipping the package install"
+  warn "  provision it once with: gentle-shell setup"
+else
+  step "Gentle Shell packages (${PACKAGE_COUNT})"
+  for url in "${GENTLE_SHELL_PACKAGES[@]}"; do
+    [[ "$url" =~ ^# ]] && continue
+    install_shell_package "$url"
+  done
+fi
 
 # === Agent skills ===
 #
 # The clone loop is latency-bound: each entry costs ~2.5-3.2s of DNS + TLS +
 # ref negotiation + one blob fetch, and it was 79% of a cold run. It runs in a
 # bounded pool instead, at ~5x wall-clock. Every skill writes to its own target
-# directory, so the jobs share no state — only PI_SKILLS (`pi install`) does,
-# through settings.json, and that is why it stays sequential.
+# directory, so the jobs share no state — only the package install
+# (`gentle-shell install`) does, through the home's settings.json, and that is
+# why it stays sequential.
 #
 # Output stays deterministic: jobs write to their own log, and the curated ✓
 # lines are replayed in declaration order after the barrier. No interleaving,
@@ -394,8 +442,8 @@ step "CLI tools"
 # (>= 0.31.1), which drives a real Chrome next to /_next/mcp. Installed at
 # @latest on purpose — the skill ships from vercel/next.js canary and keeps
 # raising that floor, so a pinned CLI would go stale and the skill refuses to
-# fall back to a weaker probe. Sequential, like `pi install`: npm -g mutates
-# shared global state. No browser download happens here: agent-browser
+# fall back to a weaker probe. Sequential, like the package install: npm -g
+# mutates shared global state. No browser download happens here: agent-browser
 # auto-detects an existing Chrome/Brave/Chromium/Playwright install, and the
 # cold `agent-browser install` is a one-time per-machine step (see AGENTS.md).
 if command -v npm >/dev/null 2>&1; then
@@ -415,20 +463,27 @@ step "Config files"
 # not lose: ask before replacing (see ask_overwrite). The file carries no
 # secrets. On keep, the helper's `!` line is the only output — the `ok` line
 # would falsely report an install that did not happen.
+#
+# The destination is Gentle Shell's config home, not ~/.pi/gentle-ai: that is
+# where the runtime reads profiles.json from (see resolve_config_home).
 if [[ -f "$DOTFILES_DIR/gentle-ai/profiles.json" ]]; then
-  mkdir -p "$HOME/.pi/gentle-ai"
+  config_home="$(resolve_config_home)"
+  mkdir -p "$config_home"
   if ask_overwrite "$DOTFILES_DIR/gentle-ai/profiles.json" \
-     "$HOME/.pi/gentle-ai/profiles.json" "gentle-ai/profiles.json"; then
-    cp "$DOTFILES_DIR/gentle-ai/profiles.json" "$HOME/.pi/gentle-ai/profiles.json"
-    ok "gentle-ai/profiles.json → ~/.pi/gentle-ai/"
+     "$config_home/profiles.json" "gentle-ai/profiles.json"; then
+    cp "$DOTFILES_DIR/gentle-ai/profiles.json" "$config_home/profiles.json"
+    ok "gentle-ai/profiles.json → ${config_home}/"
   fi
 else
   warn "gentle-ai/profiles.json missing from bundle — skip gentle-pi profiles install"
 fi
 
-# NOTE: model providers (~/.pi/agent/models.json) and themes are NOT managed
-# by this bundle — they are machine-local state. A fresh machine must set up
-# its own providers (and their API keys) directly in ~/.pi/agent/models.json.
+# NOTE: model providers (Gentle Shell's agent home: models.json) and themes are
+# NOT managed by this bundle — they are machine-local state. A fresh machine
+# must set up its own providers (and their API keys) directly in
+# ~/.gentle-shell/agent/models.json. `gentle-shell home import-pi` copies the
+# sign-in file (auth.json), the MCP servers and the default provider/model,
+# but NOT models.json: custom providers have to be copied by hand (mode 600).
 
 # === Local skills ===
 step "Local skills (${local_count})"
@@ -467,4 +522,4 @@ else
   warn "nextjs-docs (v${NEXT_DOCS_VERSION}) not generated — run $DOTFILES_DIR/generate-next-docs.sh $NEXT_DOCS_VERSION manually"
 fi
 
-echo "✓ Done. Open Pi and run /reload."
+echo "✓ Done. Open gentle-shell to use it."
