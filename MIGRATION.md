@@ -17,7 +17,6 @@ es reproducible.
 | `~/.engram/` | tu memoria | **se conserva**: no se toca en ningún paso |
 | `~/.gentle-ai/` | el estado del CLI de Gentle AI | **se conserva** |
 | `~/.local/bin/gentle-ai` | el CLI de Gentle AI | **se conserva** |
-| `~/.local/opt/pen/`, `~/.config/Pen/` | la app de pen.dev | **se conservan** (son por máquina) |
 | `~/Documentos/Workspace/dotfiles-ai` | este repo | **se conserva**: es la fuente de verdad |
 
 ---
@@ -130,9 +129,9 @@ Qué instala, todo dentro del home nuevo:
 | Qué | Dónde |
 |---|---|
 | `pi-antigravity` (tu provider), `diagram-design` | `~/.gentle-shell/agent/npm/` |
-| los 22 skills de agente de upstream + los 5 locales | `~/.agents/skills/` |
+| los 22 skills de agente de upstream + los 4 locales | `~/.agents/skills/` |
 | el CLI `agent-browser` | tu npm global |
-| los servidores MCP declarados (`pencil`) | `<agent home>/mcp.json` |
+| los servidores MCP declarados | `<agent home>/mcp.json` |
 | las reglas de web-design horneadas y el snapshot de docs de Next.js | `~/.agents/skills/` |
 
 *Resultado esperado:* un `✓` por cada ítem y después `✓ Done. Open

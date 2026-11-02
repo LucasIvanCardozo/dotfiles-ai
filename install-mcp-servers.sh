@@ -51,12 +51,9 @@ done
 
 # The MCP servers this bundle installs. One record per line, pipe-separated,
 # so no field may contain "|". Add a new server here — nothing else to touch.
+# Format:
+#   'name|transport|target|exposure|description'
 MCP_SERVERS=(
-  # Pen (pen.dev) design canvas. The desktop app and this MCP binary are
-  # per-machine (the app ships them); the registration is what the bundle
-  # owns. `direct` exposure declares its tools to the model like built-in
-  # tools — the pen-dev skill calls them that way.
-  'pencil|stdio|"$HOME/.local/opt/pen/mcp/mcp-server-linux-x64" --app desktop --agent gentle-shell|direct|Pen (pen.dev) design canvas: inspect and edit .pen documents in the running Pen desktop app'
 )
 
 ok()   { echo "  ✓ $*"; }
