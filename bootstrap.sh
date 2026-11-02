@@ -183,7 +183,6 @@ _dump_failure() {
 # them again here would only duplicate work.
 GENTLE_SHELL_PACKAGES=(
   "https://github.com/cathrynlavery/diagram-design"
-  "npm:@estebanforge/pi-codegraph-enhanced"  # CodeGraph native ext, fork of @vndv/pi-codegraph with startup auto-index (needs `@colbymchenry/codegraph` CLI on PATH)
   "npm:pi-antigravity"      # the Antigravity (Google account) provider — the sign-in this machine uses
 )
 

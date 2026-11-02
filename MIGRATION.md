@@ -129,7 +129,7 @@ Qué instala, todo dentro del home nuevo:
 
 | Qué | Dónde |
 |---|---|
-| `pi-antigravity` (tu provider), `diagram-design`, `pi-codegraph-enhanced` | `~/.gentle-shell/agent/npm/` |
+| `pi-antigravity` (tu provider), `diagram-design` | `~/.gentle-shell/agent/npm/` |
 | los 22 skills de agente de upstream + los 5 locales | `~/.agents/skills/` |
 | el CLI `agent-browser` | tu npm global |
 | `gentle-ai/profiles.json` (Full-Code / Chill-Code / Boludear) | el config home de Gentle Shell |
