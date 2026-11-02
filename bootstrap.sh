@@ -22,11 +22,10 @@
 #         ./bootstrap.sh -y         # overwrite every differing config copy
 #                                   # without asking (unattended runs)
 #
-# Overwrite prompts: the copied configs that can hold runtime edits
-# (gentle-ai/profiles.json) ask before replacing a differing runtime copy — Enter/y/yes replaces, anything else keeps. With no
-# terminal (cron, CI, piped stdin) the runtime copy is kept, never
-# overwritten silently and never hung on; -y / --yes (or DOTFILES_ASSUME_YES=1)
-# answers every prompt with yes and restores the unconditional clobber.
+# Overwrite prompts: none. The bundle installs no file that the runtime lets
+# you edit in place, so there is nothing to ask about. -y / --yes (or
+# DOTFILES_ASSUME_YES=1) is still accepted and answers "yes" to any prompt a
+# future step may add; today it is a no-op.
 #
 # DOTFILES_JOBS=<n> caps how many agent skills install concurrently
 # (default 6, 1 = one at a time). The clone loop is latency-bound, so a small
@@ -54,11 +53,10 @@ for arg in "$@"; do
 Usage: ./bootstrap.sh [--verbose] [-y]
 
   (no flag)   print only curated lines: section headers, one ✓ per
-              installed item, ? for the overwrite question, ! for warnings
+              installed item, ! for warnings
   -v, --verbose  stream every command's output live (debugging)
-  -y, --yes   answer every overwrite prompt with yes: differing config
-              copies (gentle-ai/profiles.json) are replaced without
-              asking. For unattended runs.
+  -y, --yes   answer every overwrite prompt with yes. No step prompts
+              today, so it is a no-op kept for unattended runs.
 
   DOTFILES_VERBOSE=1 does the same as --verbose.
   DOTFILES_ASSUME_YES=1 does the same as -y.
@@ -70,8 +68,10 @@ USAGE
   esac
 done
 [[ "${DOTFILES_VERBOSE:-0}" == "1" ]] && VERBOSE=1
-# Same env-var equivalence as DOTFILES_VERBOSE: the unattended escape for the
-# overwrite prompts below.
+# Same env-var equivalence as DOTFILES_VERBOSE. ASSUME_YES is reserved: no
+# step prompts today, so it is a no-op. It stays so that scripted runs
+# (DOTFILES_ASSUME_YES=1 ./bootstrap.sh) keep working if a future step adds a
+# prompt.
 [[ "${DOTFILES_ASSUME_YES:-0}" == "1" ]] && ASSUME_YES=1
 readonly VERBOSE ASSUME_YES
 
@@ -80,58 +80,6 @@ readonly VERBOSE ASSUME_YES
 step() { echo "→ $*"; }
 ok()   { echo "  ✓ $*"; }
 warn() { echo "  ! $*" >&2; }
-
-# ask_overwrite CANDIDATE TARGET LABEL — decide whether TARGET (the installed
-# runtime copy) may be replaced by CANDIDATE (the bundle copy). Returns
-# 0 = replace, 1 = keep. Both
-# clobber sites go through this helper so the overwrite semantics cannot
-# drift apart. Nothing is printed when there is nothing to decide.
-ask_overwrite() {
-  local candidate="$1" target="$2" label="$3"
-  local answer
-  # Nothing on disk yet: nothing to lose, so replace without asking.
-  if [[ ! -f "$target" ]]; then
-    return 0
-  fi
-  # Byte-identical: nothing to decide — keep the prompt out of the common
-  # no-op run so it does not become noise.
-  if cmp -s "$candidate" "$target"; then
-    return 0
-  fi
-  # Unattended escape: -y / DOTFILES_ASSUME_YES=1 answers every prompt with
-  # yes, restoring the old unconditional clobber for scripted runs.
-  if (( ASSUME_YES )); then
-    return 0
-  fi
-  # No terminal, no consent. A non-interactive run (cron, CI, </dev/null,
-  # piped stdin) must never hang on read and must never clobber silently, so
-  # the runtime copy is kept and the reason is reported. This is the
-  # deliberate asymmetry that makes the [Y/n] default safe: consent is never
-  # inferred from a missing terminal. Use -y to opt into overwriting.
-  if [[ ! -t 0 ]]; then
-    warn "$label — runtime copy kept: stdin is not a terminal (use -y to overwrite)"
-    return 1
-  fi
-  # Prompt on stderr so a piped stdout stays clean. Default is yes ([Y/n]):
-  # Enter or y replaces, anything else keeps. EOF is NOT consent — `read`
-  # returning non-zero (Ctrl-D, closed descriptor) keeps the runtime copy
-  # even though it also yields an empty answer, which is why the read's
-  # status is tested before the answer's content.
-  printf '  ? %s: runtime copy differs from the bundle — overwrite it? [Y/n] ' "$label" >&2
-  answer=""
-  if read -r answer; then
-    case "$answer" in
-      # `yes` is accepted too — the [Y/n] label invites it, and refusing it
-      # would keep a copy the human just asked to replace.
-      ""|[yY]|[yY][eE][sS]) return 0 ;;
-      *) warn "$label — runtime copy kept; the bundle copy was NOT installed"
-         return 1 ;;
-    esac
-  else
-    warn "$label — runtime copy kept; the bundle copy was NOT installed"
-    return 1
-  fi
-}
 
 # Failure logs live outside the repo, next to the Next.js docs log below.
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-ai"
@@ -269,23 +217,6 @@ install_shell_package() {
   local name="${url##*/}"
   run_quiet "gentle-shell install $name" gentle-shell install "$url"
   ok "$name"
-}
-
-# resolve_config_home — where Gentle Shell keeps its own settings (profiles,
-# the global model routing, the persona, the banner, the vim preference, the
-# background-subagents policy). The rule is the one Gentle Shell applies
-# itself, so the bundle writes to the same place the runtime reads:
-#   1. a bundled install   -> <prefix>/config/gentle-ai
-#   2. GENTLE_PI_CONFIG_HOME, when set
-#   3. the isolated home   -> ~/.gentle-shell/gentle-ai
-resolve_config_home() {
-  if [[ -n "${GENTLE_PI_CONFIG_HOME:-}" ]]; then
-    printf '%s\n' "$GENTLE_PI_CONFIG_HOME"
-  elif [[ -d "$HOME/.gentle-shell/config/gentle-ai" ]]; then
-    printf '%s\n' "$HOME/.gentle-shell/config/gentle-ai"
-  else
-    printf '%s\n' "$HOME/.gentle-shell/gentle-ai"
-  fi
 }
 
 install_agents_skill_worker() {
@@ -473,36 +404,21 @@ else
   warn "npm not found on PATH — agent-browser not installed (next-dev-loop needs it)"
 fi
 
-# === Config files ===
-step "Config files"
-
-# gentle-pi provider profiles (model + thinking config for review/agent roles).
-# Copy from bundle so it's versionable, but a differing runtime copy carries
-# hand edits (most often the `active` profile) that a keystroke of habit must
-# not lose: ask before replacing (see ask_overwrite). The file carries no
-# secrets. On keep, the helper's `!` line is the only output — the `ok` line
-# would falsely report an install that did not happen.
+# === Config files — none ===
 #
-# The destination is Gentle Shell's config home, not ~/.pi/gentle-ai: that is
-# where the runtime reads profiles.json from (see resolve_config_home).
-if [[ -f "$DOTFILES_DIR/gentle-ai/profiles.json" ]]; then
-  config_home="$(resolve_config_home)"
-  mkdir -p "$config_home"
-  if ask_overwrite "$DOTFILES_DIR/gentle-ai/profiles.json" \
-     "$config_home/profiles.json" "gentle-ai/profiles.json"; then
-    cp "$DOTFILES_DIR/gentle-ai/profiles.json" "$config_home/profiles.json"
-    ok "gentle-ai/profiles.json → ${config_home}/"
-  fi
-else
-  warn "gentle-ai/profiles.json missing from bundle — skip gentle-pi profiles install"
-fi
-
-# NOTE: model providers (Gentle Shell's agent home: models.json) and themes are
-# NOT managed by this bundle — they are machine-local state. A fresh machine
-# must set up its own providers (and their API keys) directly in
-# ~/.gentle-shell/agent/models.json. `gentle-shell home import-pi` copies the
-# sign-in file (auth.json), the MCP servers and the default provider/model,
-# but NOT models.json: custom providers have to be copied by hand (mode 600).
+# The bundle installs no config file, so it has nothing to copy into the
+# runtime's config home and nothing to ask about. Everything the runtime reads
+# as editable state is per-machine and owned by the user:
+#
+#   * Model providers (Gentle Shell's agent home: models.json) and themes. A
+#     fresh machine must set up its own providers (and their API keys) directly
+#     in ~/.gentle-shell/agent/models.json. `gentle-shell home import-pi` copies
+#     the sign-in file (auth.json), the MCP servers and the default
+#     provider/model, but NOT models.json: custom providers have to be copied
+#     by hand (mode 600).
+#   * Agent-model profiles (Gentle Shell's config home: profiles.json). The
+#     user creates, edits and switches them from the runtime's own screen
+#     (/gentle:profiles); the bundle neither ships nor overwrites them.
 
 # === Local skills ===
 step "Local skills (${local_count})"

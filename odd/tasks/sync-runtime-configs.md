@@ -321,3 +321,25 @@ declined by the user, who only cared about the key being published.
   contract. Until `NAN_API_KEY` is exported, running `./bootstrap.sh` would
   remove the key the runtime currently holds — see the migration note in
   `models-json-clobber.md`.
+
+## Superseded — the profiles leave the bundle
+
+The bundle no longer ships `gentle-ai/profiles.json`, and `bootstrap.sh` no
+longer writes anything into the runtime's config home. The feature this
+document describes — keep the bundle's `profiles.json` in sync with the
+runtime's, and clobber it on bootstrap — is retired: agent-model profiles are
+per-machine state that the user owns and edits from the runtime's own
+`/gentle:profiles` screen.
+
+Consequences for the increments above:
+
+- `gentle-ai/profiles.json` is deleted from the bundle, in the same commit that
+  removed the copy step from `bootstrap.sh`.
+- The increment-1 non-goal "no change to `bootstrap.sh` semantics: `profiles.json`
+  keeps clobber" no longer holds — there is no clobber left to preserve.
+- `ask_overwrite` and `resolve_config_home` were removed with it. `-y / --yes`
+  stays accepted as a no-op, so `DOTFILES_ASSUME_YES=1 ./bootstrap.sh` keeps
+  working.
+- A machine's runtime `profiles.json` is untouched by the bundle from now on.
+  With no file at all, every agent inherits its default model: a missing
+  `profiles.json` is a normal state, not an error.

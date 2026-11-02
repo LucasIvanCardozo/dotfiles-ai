@@ -132,7 +132,6 @@ Qué instala, todo dentro del home nuevo:
 | `pi-antigravity` (tu provider), `diagram-design` | `~/.gentle-shell/agent/npm/` |
 | los 22 skills de agente de upstream + los 5 locales | `~/.agents/skills/` |
 | el CLI `agent-browser` | tu npm global |
-| `gentle-ai/profiles.json` (Full-Code / Chill-Code / Boludear) | el config home de Gentle Shell |
 | los servidores MCP declarados (`pencil`) | `<agent home>/mcp.json` |
 | las reglas de web-design horneadas y el snapshot de docs de Next.js | `~/.agents/skills/` |
 
@@ -143,6 +142,10 @@ gentle-shell to use it.`
 > `~/.gentle-shell/agent/models.json`, que es estado local de la máquina. En
 > esta máquina no existe (usás la sign-in de Antigravity), pero en otra puede
 > existir: si lo tenías, guardalo **antes** del paso 1.
+>
+> Tampoco maneja los perfiles de modelos: se crean y se cambian desde la
+> pantalla `/gentle:profiles` del runtime, en el config home. Sin
+> `profiles.json`, cada agente usa su modelo por defecto.
 
 ## Paso 6 — Loguearte (el home quedó limpio)
 
@@ -159,9 +162,8 @@ gentle-shell
 # el runtime y su home
 gentle-shell --version
 
-# el home tiene los paquetes y el config home tiene los perfiles
+# el home tiene los paquetes
 ls ~/.gentle-shell/agent/settings.json
-ls ~/.gentle-shell/config/gentle-ai/profiles.json 2>/dev/null || ls ~/.gentle-shell/gentle-ai/profiles.json
 
 # el bundle instaló los MCP declarados
 gentle-shell mcp list
